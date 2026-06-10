@@ -1,0 +1,18 @@
+{
+  "tenantName": "Fabrikam Inc (demo — governing agents)",
+  "tenant": {"licenses": {"copilotSeats": 850, "e3": true, "e5": true, "sam": true}},
+  "identity": {"caBaseline": true, "riskBasedCAandPIM": true, "aiAdminDelegated": true},
+  "sharepoint": {"dagReportLastRunDays": 14, "interimBrakes": true, "siteLifecycleManagement": true, "oversharedSitesOpen": 3},
+  "purview": {"sensitivityLabelsPublished": true, "dlpPoliciesActive": true, "dspmForAiEnabled": true, "dlpForCopilot": false, "labelInheritanceVerified": true, "auditCopilotInteractions": true, "ediscoveryProven": true, "retentionForAiInteractions": true, "communicationCompliance": false},
+  "teams": {"protectionReviewed": true},
+  "agents": {"inventoryVisible": true, "copilotStudioAgents": 23, "unregisteredAgents": 2, "connectorsReviewed": true, "connectorDecisionsConfigured": true, "sharingLimitsConfigured": true, "dlpBlocksUnsanctionedPublishing": true, "environmentsSeparated": true, "orphanedAgentIdentities": 1, "credentialRotation": false},
+  "finops": {"consumptionMonitoring": true, "costAttribution": false},
+  "seed": {
+    "answers": {"selfStage": 3, "targetStage": 4, "decisionRightsKnown": true, "sponsorAndForum": true, "aiPolicy": true, "irRunbook": true, "killSwitchTested": false, "promotionGates": true, "cadenceOperating": true, "decisionRights": true, "autonomyAppetite": "approve"},
+    "agents": [
+      {"id": "agt-fab-1", "name": "HR Onboarding Agent", "businessOwner": "T. Nguyen", "technicalOwner": "J. Rivera", "dataOwner": "P. Shah", "securityOwner": "M. Okafor", "riskTier": "medium", "autonomyTier": "act-with-approval", "identityMode": "on-behalf-of", "valueHypothesis": "Cut onboarding admin 30%", "lastAttested": "now"},
+      {"id": "agt-fab-2", "name": "Sales RFP Assistant", "businessOwner": "K. Ito", "technicalOwner": "A. Berg", "dataOwner": "P. Shah", "securityOwner": "M. Okafor", "riskTier": "high", "autonomyTier": "suggest", "identityMode": "own-identity", "valueHypothesis": "RFP turnaround 5d → 2d", "lastAttested": "now"},
+      {"id": "agt-fab-3", "name": "IT Helpdesk Triage", "businessOwner": "D. Mensah", "technicalOwner": "J. Rivera", "dataOwner": "L. Costa", "securityOwner": "M. Okafor", "riskTier": "low", "autonomyTier": "act-with-approval", "identityMode": "own-identity", "valueHypothesis": "Deflect 25% of tickets", "lastAttested": "now"}
+    ]
+  }
+}

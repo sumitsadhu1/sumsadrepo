@@ -1,0 +1,10 @@
+{
+  "tenantName": "Contoso Ltd (demo — early journey)",
+  "tenant": {"licenses": {"copilotSeats": 0, "e3": true, "e5": false, "sam": false}},
+  "identity": {"caBaseline": false, "riskBasedCAandPIM": false, "aiAdminDelegated": false},
+  "sharepoint": {"dagReportLastRunDays": 999, "interimBrakes": false, "siteLifecycleManagement": false, "oversharedSitesOpen": 42},
+  "purview": {"sensitivityLabelsPublished": false, "dlpPoliciesActive": false, "dspmForAiEnabled": false, "dlpForCopilot": false, "labelInheritanceVerified": false, "auditCopilotInteractions": false, "ediscoveryProven": false, "retentionForAiInteractions": false, "communicationCompliance": false},
+  "teams": {"protectionReviewed": false},
+  "agents": {"inventoryVisible": false, "copilotStudioAgents": 7, "unregisteredAgents": 7, "connectorsReviewed": false, "connectorDecisionsConfigured": false, "sharingLimitsConfigured": false, "dlpBlocksUnsanctionedPublishing": false, "environmentsSeparated": false, "orphanedAgentIdentities": 3, "credentialRotation": false},
+  "finops": {"consumptionMonitoring": false, "costAttribution": false}
+}

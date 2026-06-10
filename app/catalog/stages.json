@@ -1,0 +1,24 @@
+{
+  "stages": [
+    {"n": 1, "name": "Get Ready", "tagline": "Not Copilot / AI ready — build the secure foundation"},
+    {"n": 2, "name": "Adopt & Extend", "tagline": "Copilot ready — drive adoption, start agents with guardrails"},
+    {"n": 3, "name": "Govern Agents", "tagline": "Establish agent governance — register, gates, cadence"},
+    {"n": 4, "name": "Frontier", "tagline": "Governance established — scale autonomy safely"}
+  ],
+  "gates": {
+    "1": ["AGA-301", "AGA-401", "AGA-402", "AGA-403", "AGA-404", "AGA-409", "AGA-410", "AGA-901", "AGA-203", "AGA-204"],
+    "2": ["AGA-101", "AGA-102", "AGA-104", "AGA-303", "AGA-304", "AGA-305", "AGA-408", "AGA-701", "AGA-902", "AGA-903"],
+    "3": ["AGA-103", "AGA-106", "AGA-201", "AGA-202", "AGA-307", "AGA-501", "AGA-502", "AGA-503", "AGA-601", "AGA-602", "AGA-702", "AGA-703", "AGA-801", "AGA-802", "AGA-905", "AGA-906"]
+  },
+  "controls": {
+    "1": "Visibility / Inventory",
+    "2": "Ownership & Accountability",
+    "3": "Access & Action Control",
+    "4": "Security & Data Protection",
+    "5": "Agent Identity & Credentials",
+    "6": "Incident Response & Kill Switch",
+    "7": "FinOps & Value Realization",
+    "8": "Lifecycle Governance",
+    "9": "Oversight + Process Integrity"
+  }
+}

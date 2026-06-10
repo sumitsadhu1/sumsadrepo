@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Governance Assessment</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="logo">AGA</span>
+    <div>
+      <h1>Agent Governance Assessment</h1>
+      <div class="sub" id="tenant-name">No assessment yet</div>
+    </div>
+  </div>
+  <div class="header-actions">
+    <select id="mode-select" title="Tenant mode">
+      <option value="contoso">Demo: Contoso (early journey)</option>
+      <option value="fabrikam">Demo: Fabrikam (governing agents)</option>
+      <option value="live">Live tenant (read-only)</option>
+    </select>
+    <button id="btn-assess" class="primary">Run assessment</button>
+  </div>
+</header>
+
+<nav id="tabs">
+  <button data-tab="overview" class="active">Overview</button>
+  <button data-tab="findings">Findings</button>
+  <button data-tab="plan">Plan</button>
+  <button data-tab="register">Register</button>
+  <button data-tab="questionnaire">Questionnaire</button>
+  <button data-tab="audit">Audit</button>
+  <button data-tab="settings">Settings</button>
+</nav>
+
+<main>
+  <section id="tab-overview" class="tab active"></section>
+  <section id="tab-findings" class="tab"></section>
+  <section id="tab-plan" class="tab"></section>
+  <section id="tab-register" class="tab"></section>
+  <section id="tab-questionnaire" class="tab"></section>
+  <section id="tab-audit" class="tab"></section>
+  <section id="tab-settings" class="tab"></section>
+</main>
+
+<div id="modal" class="hidden"><div id="modal-card"></div></div>
+<div id="toast" class="hidden"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
