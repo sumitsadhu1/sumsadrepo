@@ -10,6 +10,17 @@
     "2": ["AGA-101", "AGA-102", "AGA-104", "AGA-303", "AGA-304", "AGA-305", "AGA-408", "AGA-701", "AGA-902", "AGA-903"],
     "3": ["AGA-103", "AGA-106", "AGA-201", "AGA-202", "AGA-307", "AGA-501", "AGA-502", "AGA-503", "AGA-601", "AGA-602", "AGA-702", "AGA-703", "AGA-801", "AGA-802", "AGA-905", "AGA-906"]
   },
+  "crosswalk": {
+    "1": {"nist": "MAP 1 (context & inventory)", "iso": "ISO 42001 §7.5, A.4", "eu": "EU AI Act Art. 9"},
+    "2": {"nist": "GOVERN 2 (roles & responsibilities)", "iso": "ISO 42001 §5.3, A.3", "eu": "EU AI Act Art. 26"},
+    "3": {"nist": "MANAGE 2", "iso": "ISO 42001 A.5, A.9", "eu": "EU AI Act Art. 14"},
+    "4": {"nist": "MEASURE 2.7 (security & resilience)", "iso": "ISO 42001 A.7, §8", "eu": "EU AI Act Art. 10, 15"},
+    "5": {"nist": "GOVERN 1.6, MANAGE 3", "iso": "ISO 42001 A.5.4", "eu": "EU AI Act Art. 12"},
+    "6": {"nist": "MANAGE 4 (incident response)", "iso": "ISO 42001 A.10.4", "eu": "EU AI Act Art. 14(4)(e), 73"},
+    "7": {"nist": "MAP 3 (benefits/costs)", "iso": "ISO 42001 §9.1", "eu": "—"},
+    "8": {"nist": "MAP 4, MANAGE 1", "iso": "ISO 42001 A.6", "eu": "EU AI Act Art. 9"},
+    "9": {"nist": "GOVERN 4, MEASURE 1", "iso": "ISO 42001 §9.2–9.3", "eu": "EU AI Act Art. 12, 14"}
+  },
   "controls": {
     "1": "Visibility / Inventory",
     "2": "Ownership & Accountability",

@@ -1,5 +1,6 @@
 // App access control: a generated access key (scrypt-hashed at rest) exchanged
-// for an HttpOnly session cookie. Sessions live in memory only.
+// for an HttpOnly session cookie. Sessions are in-memory and carry an identity
+// (name + role) so attestations, approvals, and task changes are attributed.
 // Lost the key? Delete data/auth.json and restart — a new key is printed once.
 import crypto from 'node:crypto';
 import { load, save } from './store.js';
@@ -23,17 +24,21 @@ export function verifyKey(key) {
   return crypto.timingSafeEqual(h, Buffer.from(a.hash, 'hex'));
 }
 
-export function createSession() {
+export function createSession(name, role) {
   const t = crypto.randomBytes(24).toString('hex');
-  sessions.set(t, Date.now() + SESSION_HOURS * 3600_000);
+  sessions.set(t, { exp: Date.now() + SESSION_HOURS * 3600_000, name, role });
   return t;
 }
 
-export function checkSession(cookieHeader) {
+export function getSession(cookieHeader) {
   const m = /aga_session=([a-f0-9]{48})/.exec(cookieHeader || '');
-  if (!m) return false;
-  const exp = sessions.get(m[1]);
-  if (!exp) return false;
-  if (Date.now() > exp) { sessions.delete(m[1]); return false; }
-  return true;
+  if (!m) return null;
+  const s = sessions.get(m[1]);
+  if (!s) return null;
+  if (Date.now() > s.exp) { sessions.delete(m[1]); return null; }
+  return { name: s.name, role: s.role };
+}
+
+export function checkSession(cookieHeader) {
+  return getSession(cookieHeader) !== null;
 }

@@ -69,12 +69,12 @@ export function verifyPlan(results) {
   return save('plan', plan);
 }
 
-export function setTaskStatus(taskId, status) {
+export function setTaskStatus(taskId, status, by) {
   const plan = getPlan();
   const t = plan?.tasks.find((x) => x.id === taskId);
   if (!t) return null;
   t.status = status;
   t.autoVerified = false;
-  t.history.push({ at: new Date().toISOString(), event: 'manually set to ' + status });
+  t.history.push({ at: new Date().toISOString(), event: `manually set to ${status} by ${by || 'unknown'}` });
   return save('plan', plan);
 }

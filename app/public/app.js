@@ -17,7 +17,12 @@ function showLogin() {
     <h2>Sign in</h2>
     <p class="muted">Enter the access key printed in the server console when it first started.
     (Lost it? Delete <code>app/data/auth.json</code> and restart the server.)</p>
-    <input id="login-key" type="password" placeholder="Access key" style="width:100%" autofocus>
+    <input id="login-key" type="password" placeholder="Access key" style="width:100%;margin-bottom:6px" autofocus>
+    <input id="login-name" placeholder="Your name (actions are attributed)" style="width:100%;margin-bottom:6px">
+    <select id="login-role" style="width:100%">
+      <option>Global Admin</option><option>AI Governance Lead</option><option>Security Admin</option>
+      <option>Compliance Admin</option><option>Agent Owner</option><option>Solution Architect</option><option>Operator</option>
+    </select>
     <div class="modal-actions"><button class="primary" onclick="doLogin()">Sign in</button></div>
     <div id="login-err" class="muted"></div>`;
   $('#modal').classList.remove('hidden');
@@ -25,7 +30,7 @@ function showLogin() {
 
 window.doLogin = async function () {
   try {
-    await api('/api/login', { key: $('#login-key').value.trim() });
+    await api('/api/login', { key: $('#login-key').value.trim(), name: $('#login-name').value.trim(), role: $('#login-role').value });
     closeModal();
     await refresh();
   } catch (e) {
@@ -46,6 +51,7 @@ async function refresh() {
   $('#tenant-name').textContent = S.assessment
     ? `${S.assessment.tenantName} — scanned ${new Date(S.assessment.at).toLocaleString()}`
     : 'No assessment yet — pick a tenant and click Run assessment';
+  $('#whoami').textContent = S.identity ? `${S.identity.name} · ${S.identity.role}` : '';
   renderAll();
 }
 
@@ -69,6 +75,30 @@ function renderOverview() {
     return `<div class="stage-chip ${cls}"><b>Stage ${s.n} — ${esc(s.name)}</b><small>${esc(s.tagline)}</small></div>`;
   }).join('');
   const gap = (scores.configScore ?? 0) - (scores.attestScore ?? 0);
+  // why this stage: what blocks the next gate
+  const nextGate = String(placement.stage);
+  const blocking = placement.gateDetail[nextGate]?.failing ?? [];
+  const byId = Object.fromEntries(S.assessment.results.map((r) => [r.id, r]));
+  const whyStage = placement.stage < 4
+    ? `<div class="card gap-callout"><h3>To reach Stage ${placement.stage + 1}</h3>
+       ${blocking.length
+         ? `<p class="muted">Clear these gate checks:</p>` + blocking.map((id) =>
+             `<div>• <b>${id}</b> — ${esc(byId[id]?.title ?? '')}</div>`).join('')
+         : '<p class="muted">Gate checks pass — re-run assessment or review not-collected items.</p>'}
+       </div>`
+    : '<div class="card"><h3>Frontier</h3><p class="muted">No exit gate — steady state of earned autonomy.</p></div>';
+  // trend sparkline from history
+  const hist = S.history.slice(-12);
+  const spark = hist.length >= 2 ? (() => {
+    const w = 420, h = 80, pad = 6;
+    const x = (i) => pad + (i * (w - 2 * pad)) / (hist.length - 1);
+    const y = (v) => h - pad - ((v ?? 0) * (h - 2 * pad)) / 100;
+    const line = (key, color) =>
+      `<polyline fill="none" stroke="${color}" stroke-width="2" points="${hist.map((p, i) => `${x(i)},${y(p[key])}`).join(' ')}"/>`;
+    return `<div class="card"><h3>Trajectory (last ${hist.length} runs)</h3>
+      <svg viewBox="0 0 ${w} ${h}" style="width:100%;max-width:460px">${line('configScore', '#0f6cbd')}${line('attestScore', '#b97e00')}</svg>
+      <div class="muted"><span style="color:#0f6cbd">■</span> config &nbsp; <span style="color:#b97e00">■</span> attestation</div></div>`;
+  })() : '';
   const bars = Object.entries(scores.perControl).map(([n, c]) => `
     <div class="bar-row">
       <div class="bar-label">${n}. ${esc(c.name)}</div>
@@ -83,6 +113,7 @@ function renderOverview() {
       <div class="card gap-callout"><h3>The gap</h3><div class="big">${gap > 0 ? gap : 0} pts</div><div class="muted">config-ready but governance-untracked — the number most assessments miss</div></div>
       <div class="card"><h3>Unlockable (E5)</h3><div class="big">${scores.unlockable.length}</div><div class="muted">checks gated by licensing${scores.notCollected.length ? ` · ${scores.notCollected.length} not collected in this mode` : ''}</div></div>
     </div>
+    <div class="cards" style="grid-template-columns: 1fr 1fr">${whyStage}${spark}</div>
     <div class="card"><h3>Per-control: evidence layer vs decision layer</h3><div class="bars">${bars}</div></div>`;
 }
 
@@ -125,7 +156,7 @@ window.openFix = async function (checkId) {
 
 window.applyFix = async function (checkId) {
   closeModal();
-  await api('/api/fix/apply', { checkId, approvedBy: 'you' });
+  await api('/api/fix/apply', { checkId }); // approval is attributed to the signed-in identity server-side
   toast(checkId + ' applied — re-scan verified, plan updated');
   await refresh();
 };
@@ -181,8 +212,11 @@ function renderRegister() {
       <td>${esc(a.businessOwner || '—')} / ${esc(a.technicalOwner || '—')}<br>${esc(a.dataOwner || '—')} / ${esc(a.securityOwner || '—')}</td>
       <td>${esc(a.riskTier || '—')} · ${esc(a.autonomyTier || '—')}<br><span class="muted">${esc(a.identityMode || 'identity mode?')}</span></td>
       <td>${esc(a.valueHypothesis || '—')}</td>
-      <td>${d == null ? '<span class="pill fail">never</span>' : `<span class="pill ${stale ? 'fail' : 'pass'}">${d}d ago</span>`}</td>
-      <td><button class="small" onclick="attest('${a.id}')">Attest</button></td>
+      <td>${d == null ? '<span class="pill fail">never</span>' : `<span class="pill ${stale ? 'fail' : 'pass'}">${d}d ago</span>`}
+        ${a.lastAttestedBy ? `<br><span class="muted">by ${esc(a.lastAttestedBy)}</span>` : ''}
+        ${d != null && !stale ? `<br><span class="muted">expires in ${90 - d}d</span>` : ''}
+        ${a.attestNote ? `<br><span class="muted">"${esc(a.attestNote)}"</span>` : ''}</td>
+      <td><button class="small" onclick="attest('${a.id}', '${esc(a.name)}')">Attest</button></td>
     </tr>`;
   }).join('');
   el.innerHTML = `
@@ -212,7 +246,25 @@ window.addAgent = async function (ev) {
   await refresh();
   return false;
 };
-window.attest = async function (id) { await api('/api/register/attest', { id }); toast('Attested'); await refresh(); };
+window.attest = function (id, name) {
+  $('#modal-card').innerHTML = `
+    <h2>Attest — ${esc(name)}</h2>
+    <p class="muted">You are confirming, as <b>${esc(S.identity?.name)} (${esc(S.identity?.role)})</b>, that this agent's
+    ownership, risk tier, and autonomy tier are accurate today. The attestation is timestamped, attributed to you, and expires in 90 days.</p>
+    <textarea id="attest-note" placeholder="Optional evidence note or link (e.g. review meeting, ticket, document)" style="width:100%;min-height:70px"></textarea>
+    <div class="modal-actions">
+      <button onclick="closeModal()">Cancel</button>
+      <button class="primary" onclick="doAttest('${id}')">Attest</button>
+    </div>`;
+  $('#modal').classList.remove('hidden');
+};
+window.doAttest = async function (id) {
+  const note = $('#attest-note').value.trim();
+  closeModal();
+  await api('/api/register/attest', { id, note });
+  toast('Attested — recorded with your identity and timestamp');
+  await refresh();
+};
 
 /* ---------- Questionnaire ---------- */
 function renderQuestionnaire() {
@@ -327,6 +379,8 @@ $('#mode-select').addEventListener('change', async (e) => {
   toast('Tenant mode: ' + e.target.value + ' — run assessment');
   await refresh();
 });
+
+$('#btn-report').addEventListener('click', () => window.open('/api/report', '_blank'));
 
 $('#btn-assess').addEventListener('click', async () => {
   $('#btn-assess').disabled = true;

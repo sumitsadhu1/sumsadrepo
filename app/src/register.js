@@ -33,10 +33,14 @@ export function upsertAgent(mode, agent) {
   return saveRegister(mode, reg);
 }
 
-export function attestAgent(mode, id) {
+export function attestAgent(mode, id, by, note) {
   const reg = getRegister(mode);
   const a = reg.agents.find((x) => x.id === id);
-  if (a) a.lastAttested = new Date().toISOString();
+  if (a) {
+    a.lastAttested = new Date().toISOString();
+    a.lastAttestedBy = by || 'unknown';
+    if (note) a.attestNote = note;
+  }
   return saveRegister(mode, reg);
 }
 

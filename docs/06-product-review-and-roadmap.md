@@ -33,8 +33,8 @@ Two-persona review of the runnable MVP (`app/`), an honest production-readiness 
 | P0 | Live collector buildout (Purview, SharePoint admin, Power Platform, agent inventory; PowerShell sidecar for non-Graph surfaces). Target ≥70% of F-tier checks live | Admin #1 | **Started** — applications/credentials, sensitivity labels collectors added; throttling + paging added |
 | P0 | Security hardening: token encrypted at rest + in-memory access token + refresh, app access-key auth, localhost-only binding | Admin #2, #4 | **Done (v0.2)** — Entra SSO for the app itself remains P1 |
 | P1 | Evidence-grade findings: objects/counts/links per check, drill-down, partial credit | Stakeholder #1, Admin #3 | **Started** — evidence pipeline + UI display in v0.2 |
-| P1 | Real attestations: signed-in identity, evidence attachments, visible expiry, approval chains | Stakeholder #2 | Open |
-| P2 | Executive output: PDF/PPT export, trend charts, crosswalk view | Stakeholder #3 | Open |
+| P1 | Real attestations: signed-in identity, evidence attachments, visible expiry, approval chains | Stakeholder #2 | **v0.3** — attributed attestations w/ identity, timestamp, expiry, notes; Entra-verified identity + approval chains still open |
+| P2 | Executive output: PDF/PPT export, trend charts, crosswalk view | Stakeholder #3 | **v0.3** — HTML report (print→PDF) w/ crosswalk + trajectory; PPT/theming open |
 | P2 | Multi-user + roles; Dataverse register; Planner/DevOps sync | Stakeholder #4 | Open |
 | P3 | Operator write path (only after app auth is Entra-grade) | — | Blocked by P1 |
 

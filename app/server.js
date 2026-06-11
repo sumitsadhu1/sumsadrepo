@@ -12,7 +12,8 @@ import {
   getSettings, saveSettings, buildSnapshot, resetDemo,
   fixPreview, fixApply, deviceCodeStart, deviceCodePoll, liveCollect,
 } from './src/collectors.js';
-import { ensureAccessKey, verifyKey, createSession, checkSession } from './src/auth.js';
+import { ensureAccessKey, verifyKey, createSession, getSession } from './src/auth.js';
+import { renderReport } from './src/report.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -59,7 +60,8 @@ function runAssessment() {
 }
 
 const routes = {
-  'GET /api/state': () => ({
+  'GET /api/state': (_b, who) => ({
+    identity: who,
     settings: getSettings(),
     stages: STAGES,
     questions: QUESTIONS,
@@ -79,9 +81,9 @@ const routes = {
     const target = b.targetStage || getAnswers().targetStage || 4;
     return { plan: generatePlan(a.results, Number(target)) };
   },
-  'POST /api/plan/task': (b) => ({ plan: setTaskStatus(b.taskId, b.status) }),
+  'POST /api/plan/task': (b, who) => ({ plan: setTaskStatus(b.taskId, b.status, who?.name) }),
   'POST /api/register/agent': (b) => ({ register: upsertAgent(getSettings().mode, b) }),
-  'POST /api/register/attest': (b) => ({ register: attestAgent(getSettings().mode, b.id) }),
+  'POST /api/register/attest': (b, who) => ({ register: attestAgent(getSettings().mode, b.id, `${who?.name} (${who?.role})`, b.note) }),
   'POST /api/demo/reset': () => {
     const s = getSettings();
     if (s.mode === 'live') throw new Error('Reset applies to demo tenants only');
@@ -93,10 +95,10 @@ const routes = {
     if (s.mode === 'live') throw new Error('Configuration is demo-only in this MVP — live mode is read-only by design');
     return { preview: fixPreview(s.mode, b.checkId) };
   },
-  'POST /api/fix/apply': (b) => {
+  'POST /api/fix/apply': (b, who) => {
     const s = getSettings();
     if (s.mode === 'live') throw new Error('Configuration is demo-only in this MVP — live mode is read-only by design');
-    const r = fixApply(s.mode, b.checkId, b.approvedBy);
+    const r = fixApply(s.mode, b.checkId, `${who?.name} (${who?.role})`);
     return { result: r, assessment: runAssessment(), plan: getPlan() };
   },
   'POST /api/live/start': async (b) => deviceCodeStart(b.tenantId, b.clientId),
@@ -115,22 +117,38 @@ http.createServer(async (req, res) => {
     for await (const c of req) chunks.push(c);
     let body = {};
     try { body = JSON.parse(Buffer.concat(chunks).toString() || '{}'); } catch {}
-    if (verifyKey(body.key)) {
+    const name = String(body.name || '').trim().slice(0, 60);
+    if (verifyKey(body.key) && name) {
+      const role = String(body.role || 'Operator').slice(0, 40);
       res.writeHead(200, {
         'Content-Type': 'application/json',
-        'Set-Cookie': `aga_session=${createSession()}; HttpOnly; SameSite=Strict; Path=/`,
+        'Set-Cookie': `aga_session=${createSession(name, role)}; HttpOnly; SameSite=Strict; Path=/`,
       });
-      res.end('{"ok":true}');
+      res.end(JSON.stringify({ ok: true, identity: { name, role } }));
     } else {
       res.writeHead(401, { 'Content-Type': 'application/json' });
-      res.end('{"error":"Invalid access key"}');
+      res.end(JSON.stringify({ error: name ? 'Invalid access key' : 'Your name is required — actions are attributed' }));
     }
     return;
   }
 
-  if (url.pathname.startsWith('/api/') && !checkSession(req.headers.cookie)) {
+  const identity = getSession(req.headers.cookie);
+  if (url.pathname.startsWith('/api/') && !identity) {
     res.writeHead(401, { 'Content-Type': 'application/json' });
     res.end('{"error":"Sign in with the access key (printed when the server first started)"}');
+    return;
+  }
+
+  if (key === 'GET /api/report') {
+    const html = renderReport({
+      assessment: load('last-assessment', null),
+      plan: getPlan(),
+      register: getRegister(getSettings().mode),
+      history: load('history', []),
+      generatedBy: `${identity.name} (${identity.role})`,
+    });
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(html);
     return;
   }
 
@@ -143,7 +161,7 @@ http.createServer(async (req, res) => {
       try { body = JSON.parse(raw); } catch { body = {}; }
     }
     try {
-      const out = await routes[key](body);
+      const out = await routes[key](body, identity);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(out));
     } catch (e) {
