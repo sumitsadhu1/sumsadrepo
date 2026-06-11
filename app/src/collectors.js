@@ -5,6 +5,7 @@
 import { load, save, loadFixture } from './store.js';
 import { CHECKS, getPath, setPath } from './engine.js';
 import { registerStats } from './register.js';
+import { applyPack, clearPack } from './evidence.js';
 
 export function getSettings() {
   return load('settings', { mode: 'contoso', live: { tenantId: '', clientId: '' } });
@@ -27,6 +28,7 @@ export function resetDemo(fixtureName) {
   // null out scoped stores so they re-seed lazily from the fixture
   save('register-' + fixtureName, null);
   save('answers-' + fixtureName, null);
+  clearPack(fixtureName);
   return save('demo-' + fixtureName, loadFixture(fixtureName));
 }
 
@@ -70,7 +72,8 @@ export function buildSnapshot(settings, governance) {
   let base;
   if (settings.mode === 'live') base = load('live-snapshot', { tenantName: 'Live tenant (not yet scanned)' });
   else base = demoState(settings.mode);
-  return { ...structuredClone(base), registerStats: registerStats(settings.mode), governance };
+  const snap = { ...structuredClone(base), registerStats: registerStats(settings.mode), governance };
+  return applyPack(settings.mode, snap); // evidence pack overlays last, with provenance
 }
 
 // ---------- live mode: device-code flow + Graph, zero dependencies ----------

@@ -44,6 +44,18 @@ npm test
 3. In the app: **Settings → Live tenant** → paste Tenant ID + App (client) ID → **Sign in with device code** → enter the code at microsoft.com/devicelogin.
 4. **Run assessment.** Live collectors currently cover: licensing (Copilot seats, E3/E5/SAM — with per-SKU evidence), Conditional Access baseline + risk policies (policy names as evidence), AI Administrator delegation vs Global Admin sprawl (AGA-203), Purview audit reachability (AGA-901, labelled as a proxy measurement), app/agent identities (ownerless identities and long-lived secrets, named), and sensitivity labels (best effort). Tenant sharing posture and guest-invite settings are collected as **context evidence** on AGA-402/AGA-410 without flipping those checks — Graph does not expose RCD/RAC or Teams tier protection, so they stay honestly **not collected**. Live mode never writes anything.
 
+## Evidence pack (the checks Graph can't see)
+
+DAG report freshness, RCD/RAC brakes, DLP, unified audit, retention, site lifecycle, and Teams tiers live behind admin PowerShell, not Graph. For those, run the read-only collector where the modules and roles already exist:
+
+```powershell
+./scripts/collect-evidence.ps1 -SpoAdminUrl https://<tenant>-admin.sharepoint.com -CollectedBy you@tenant.com
+```
+
+It writes `evidence-pack.json`; import it under **Settings → Evidence pack** (requires a fix-capable role — importing measured posture carries the same weight as applying a fix). Pack values override collector values for the paths they measure, every evidence line carries provenance (collected-by, imported-by, date), and **packs expire after 30 days** — expired packs stop contributing and their checks fall back to not-collected with a dated note. Sections the operator can't run are simply skipped; nothing is guessed. AGA-409/410 have no API at all and are recorded as **operator-verified** entries that require a named policy reference.
+
+With Graph wave 1 + a full evidence pack + the questionnaire, all 10 gate-1 checks are measurable — a real tenant can clear Stage 1 on evidence (locked in by `test/evidence.test.js`).
+
 ## What's real vs. demo in this MVP
 
 | Capability | Status |
@@ -53,7 +65,8 @@ npm test
 | Plan generation, re-scan auto-close, drift reopen | Real |
 | Register, attestations, expiry staleness | Real (JSON store; Dataverse in the roadmap) |
 | Configure pipeline (dry-run → approve → apply → verify → audit) | Real pipeline, **demo targets only** — live writes are deliberately out of MVP scope (see Reader/Operator design in docs/05) |
-| Live tenant collection | Real for licensing, Conditional Access, directory-role delegation, audit reachability, app identities, labels; SharePoint/Teams posture as context evidence; SPO admin-API + Purview-PowerShell collectors are the remaining backlog |
+| Live tenant collection | Real for licensing, Conditional Access, directory-role delegation, audit reachability, app identities, labels; SharePoint/Teams posture as context evidence |
+| Evidence pack (PowerShell-only surfaces: DAG, RCD/RAC, DLP, audit, retention) | Real — `scripts/collect-evidence.ps1` + validated import with provenance and 30-day expiry |
 
 ## Layout
 

@@ -1,6 +1,6 @@
 {
   "name": "agent-governance-assessment",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Assessment + configuration + PM app for AI/agent governance in Microsoft 365 — zero runtime dependencies",
   "type": "module",
   "scripts": {

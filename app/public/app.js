@@ -388,14 +388,56 @@ function renderSettings() {
       </div>
       <div class="card">
         <h3>Live tenant (read-only)</h3>
-        <p class="muted">Create an Entra app registration (public client), grant delegated <b>Organization.Read.All</b> and <b>Policy.Read.All</b>, then sign in with a device code. Live mode never writes — configuration stays demo-only in this MVP.</p>
+        <p class="muted">Create an Entra app registration (public client), grant the delegated read-only scopes listed in the README, then sign in with a device code. Live mode never writes — configuration stays demo-only in this MVP.</p>
         <input id="live-tenant" placeholder="Tenant ID" value="${esc(live.tenantId || '')}" style="width:100%;margin-bottom:6px">
         <input id="live-client" placeholder="App (client) ID" value="${esc(live.clientId || '')}" style="width:100%;margin-bottom:6px">
         <button class="primary" onclick="liveStart()">Sign in with device code</button>
         <div id="live-status" class="muted" style="margin-top:8px"></div>
       </div>
+      <div class="card">
+        <h3>Evidence pack</h3>
+        <p class="muted">For surfaces Graph can't see (DAG, RCD/RAC, DLP, audit, retention): run
+        <code>scripts/collect-evidence.ps1</code> as a SharePoint/Compliance admin, then import the
+        JSON here. Pack values are <b>measured</b> posture with full provenance; packs expire after
+        ${S.evidencePack?.maxAgeDays ?? 30} days.</p>
+        ${renderPackStatus()}
+        ${S.perms?.fix ? `
+          <input id="pack-file" type="file" accept=".json,application/json" style="width:100%;margin-bottom:6px">
+          <button class="primary" onclick="importPack()">Import evidence pack</button>
+          ${S.evidencePack ? '<button onclick="clearPack()">Remove pack</button>' : ''}`
+        : '<p class="warn">Importing measured evidence requires Global Admin, Security Admin, or AI Governance Lead.</p>'}
+        <div id="pack-status" class="muted" style="margin-top:8px"></div>
+      </div>
     </div>`;
 }
+
+function renderPackStatus() {
+  const p = S.evidencePack;
+  if (!p) return '<p class="muted">No evidence pack imported for this tenant mode.</p>';
+  return `<p class="${p.expired ? 'warn' : ''}">
+    ${p.expired ? 'EXPIRED — ' : ''}collected <b>${esc(new Date(p.collectedAt).toLocaleDateString())}</b>
+    (${p.ageDays}d ago) by <span class="mono">${esc(p.collectedBy)}</span>,
+    imported by ${esc(p.importedBy)} · feeds ${p.checks.map((c) => `<span class="mono">${esc(c)}</span>`).join(', ')}
+    ${p.expired ? '— measurements ignored until a fresh pack is imported' : ''}</p>`;
+}
+
+window.importPack = async function () {
+  const f = $('#pack-file').files[0];
+  if (!f) { toast('Choose the evidence-pack.json file first'); return; }
+  try {
+    const pack = JSON.parse(await f.text());
+    const r = await api('/api/evidence/import', { pack });
+    toast(`Evidence pack imported — feeds ${r.summary.checks.join(', ')}; re-assessed`);
+    if (r.droppedPaths?.length) $('#pack-status').textContent = 'Ignored unknown paths: ' + r.droppedPaths.join(', ');
+    await refresh();
+  } catch (e) { $('#pack-status').textContent = 'Import failed: ' + e.message; }
+};
+
+window.clearPack = async function () {
+  await api('/api/evidence/clear', {});
+  toast('Evidence pack removed — re-assessed');
+  await refresh();
+};
 
 window.resetDemo = async function () { await api('/api/demo/reset', {}); toast('Demo tenant reset — re-run the assessment'); await refresh(); };
 

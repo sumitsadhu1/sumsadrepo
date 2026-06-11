@@ -55,3 +55,22 @@ New read-only Graph collectors, each with a pure unit-tested transform, endpoint
 Gate-1 measured coverage in a fully-consented live scan rises from 2/8 to 3/8 — still below the 80% floor, so a live tenant still reads **Stage 1, partial coverage**, which is the correct verdict. The remaining gate-1 checks (DAG reports, RCD/RAC, DLP, site lifecycle, Teams tiers) have **no Microsoft Graph surface**: closing them requires the SharePoint admin REST API and Security & Compliance PowerShell, which is wave 2.
 
 Tests: 23/23 (3 new transform tests assert that collection failures return `null` — a failed collector can never fabricate a measurement, and context-only transforms never flip a check).
+
+---
+
+# v0.6 — live collectors wave 2: the evidence pack (§2.5.5 closed for gate 1)
+
+Wave 1 hit the ceiling of what Graph exposes. The remaining gate-1 checks (DAG, RCD/RAC, DLP, site lifecycle, Teams tiers, retention) live behind SharePoint Online Management Shell and Security & Compliance PowerShell — surfaces a zero-dependency Node server cannot reach. v0.6 closes the gap with the same pattern zerotrustassessment uses: **out-of-band collection, in-band validation**.
+
+## How it works
+
+1. `scripts/collect-evidence.ps1` (read-only, every cmdlet a `Get-*`, names verified against Microsoft Learn: `Get-SPODataAccessGovernanceInsight`, `Get-SPOSite … RestrictContentOrgWideSearch/RestrictedAccessControl`, `Get-LabelPolicy`, `Get-DlpCompliancePolicy`, `Get-AdminAuditLogConfig`, `Get-RetentionCompliancePolicy`) runs where the admin already has the modules and roles, and writes `evidence-pack.json`. Sections fail independently → skipped sections stay *not collected*, never guessed.
+2. The app imports the pack (`POST /api/evidence/import`) behind the **fix permission** — injecting measured posture carries the same weight as applying a fix. Validation enforces schema, collector identity, value types, and a path whitelist: a pack **cannot** set paths outside its charter (e.g. it cannot flip the CA baseline).
+3. Pack values overlay the snapshot with **provenance as the first evidence line** on every check they feed: collected-when/by-whom, imported-by-whom. Packs **expire after 30 days**: an expired pack contributes nothing and leaves a dated EXPIRED note where its measurements used to be — regressions are visible, not silent.
+4. AGA-409/410 have no API surface at all (admin-center only — verified, no Get cmdlet exists). The script records them as **operator-verified** entries, which require a named policy reference and are labelled as such in evidence. This is the reviewer's own "facilitated, config hand-verified" mode, made structured and attributable.
+
+## What it changes
+
+Gate 1 is 10 checks. Graph wave 1 measures AGA-301/203 (plus 403 best-effort); the questionnaire answers AGA-204; the pack measures the remaining seven. **All 10 gate-1 checks are now measurable — a tenant can clear Stage 1 on evidence**, which was mathematically impossible before wave 2 (max 6/10 < 80% floor). The pack also feeds AGA-903 in gate 2.
+
+Verified live against the running server: an Operator gets 403 on import; a Lead's import re-assesses immediately with provenance on every fed check; gate 1 reports 10/10 measured **and still fails on the demo tenant whose measured values fail** — the pack widens coverage, it cannot manufacture passes. Tests: 28/28, including the headline regression test ("gate 1 clears on measured evidence only") and its inverse (same tenant without the pack stays Stage 1).

@@ -13,6 +13,7 @@ import {
   fixPreview, fixApply, deviceCodeStart, deviceCodePoll, liveCollect,
 } from './src/collectors.js';
 import { ensureAccessKey, verifyKey, createSession, getSession, canDo, permsFor } from './src/auth.js';
+import { importPack, clearPack, packSummary } from './src/evidence.js';
 import { renderReport } from './src/report.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -74,6 +75,7 @@ const routes = {
     register: getRegister(getSettings().mode),
     audit: load('audit', []),
     history: load('history', []),
+    evidencePack: packSummary(getSettings().mode),
   }),
   'POST /api/settings': (b) => ({ settings: saveSettings({ ...getSettings(), ...b }) }),
   'POST /api/answers': (b) => ({ answers: save('answers-' + getSettings().mode, b) }),
@@ -126,6 +128,18 @@ const routes = {
     const a = load('last-assessment', null);
     if (!a) throw new Error('Run an assessment first');
     return { __raw: JSON.stringify({ assessment: a, plan: getPlan(), register: getRegister(getSettings().mode) }, null, 2), __type: 'application/json', __name: 'assessment.json' };
+  },
+  // Importing a pack injects MEASURED posture, so it carries the same weight as
+  // applying a fix — gate it behind the same permission.
+  'POST /api/evidence/import': (b, who) => {
+    if (!canDo(who?.role, 'fix')) throw forbid(`Role "${who?.role}" cannot import evidence packs — requires Global Admin, Security Admin, or AI Governance Lead`);
+    const r = importPack(getSettings().mode, b.pack, `${who?.name} (${who?.role})`);
+    return { ...r, assessment: runAssessment(), plan: getPlan() };
+  },
+  'POST /api/evidence/clear': (b, who) => {
+    if (!canDo(who?.role, 'fix')) throw forbid(`Role "${who?.role}" cannot remove evidence packs`);
+    clearPack(getSettings().mode);
+    return { assessment: runAssessment(), plan: getPlan() };
   },
   'POST /api/live/start': async (b) => deviceCodeStart(b.tenantId, b.clientId),
   'POST /api/live/poll': async () => deviceCodePoll(),
