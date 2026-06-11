@@ -74,3 +74,23 @@ Wave 1 hit the ceiling of what Graph exposes. The remaining gate-1 checks (DAG, 
 Gate 1 is 10 checks. Graph wave 1 measures AGA-301/203 (plus 403 best-effort); the questionnaire answers AGA-204; the pack measures the remaining seven. **All 10 gate-1 checks are now measurable — a tenant can clear Stage 1 on evidence**, which was mathematically impossible before wave 2 (max 6/10 < 80% floor). The pack also feeds AGA-903 in gate 2.
 
 Verified live against the running server: an Operator gets 403 on import; a Lead's import re-assesses immediately with provenance on every fed check; gate 1 reports 10/10 measured **and still fails on the demo tenant whose measured values fail** — the pack widens coverage, it cannot manufacture passes. Tests: 28/28, including the headline regression test ("gate 1 clears on measured evidence only") and its inverse (same tenant without the pack stays Stage 1).
+
+---
+
+# v0.7 — response to the live-testing findings (FEEDBACK §7–§8)
+
+Triage: everything in §7.1/§7.2/§8.1/§8.2 that touches data integrity or the evidence model is **accepted and fixed**; "remove demo tenants" is **rejected** (agreeing with the reviewer's own note — demo is the only place the Configure pipeline can run); U5 and the standing P2/P3 items stay deferred.
+
+| Finding | Fix |
+|---|---|
+| §7.1 / B1+B2 — reset broken in live mode; plan/history/audit/last-assessment global → cross-tenant bleed; demo plans verified against live results | **All stores now per-mode** (`plan-<mode>`, `history-<mode>`, `audit-<mode>`, `last-assessment-<mode>`); `runAssessment`/exports/report read only the current mode. `POST /api/workspace/reset` works in **every** mode: demo re-seeds the fixture; live clears the workspace but never the encrypted sign-in token (live reset gated behind the fix permission — clearing an audit trail is destructive). UI button is mode-aware and errors surface as toasts. |
+| B3 — render crash on stale assessment shape | Defensive `?? []` on `gateDetail.failing/notCollected` in `renderOverview`. |
+| B4 — unhandled errors after server restart | Mode-select / apply / task handlers wrapped; 401 path falls through to the login overlay without a pageerror. |
+| B5 — Plan and Overview disagreed on next steps | `generatePlan` now emits **measure** tasks for not-collected checks (action: connect collector / import evidence pack / record attestation); `verifyPlan` auto-closes them once the check is measured (even as failing) and reopens on coverage regression. Plan and "To reach Stage N" now name the same blockers. |
+| §7.2.1 — `aiPolicy` orphaned | New check **AGA-907** (Control 9, Stage 1, gate 1): "AI acceptable-use policy approved and communicated." Catalog is 41 checks; gate 1 is 11. |
+| §7.2.2 — dead inputs | `decisionRightsKnown` (promise the code didn't keep) and `autonomyAppetite` (register owns autonomy) **removed** from the questionnaire. |
+| §7.2.3 / §8.3 — self-stage discarded | **Belief vs evidence** card on Overview whenever self-assessed ≠ measured stage, in both directions. |
+| §7.2.4 / §8.3 — questionnaire attestations had no identity/age/evidence | Governance answers are now stamped `{value, by, at, note}`; **expire after 90 days** (an expired Yes fails the check with an EXPIRED evidence line); changing one **requires the attest decision-right** (server-enforced 403); optional evidence note per answer; unchanged answers keep the original stamp (re-saving cannot re-date someone else's attestation); seeded fixture answers display as "seeded/unattributed". Evidence lines (who/when/note) flow into findings and the report. |
+| U1 contrast, U2 microcopy, U3 register delete, U4 reset visibility | Bar labels on white chips (WCAG); disabled Attest button with role tooltip; register entries deletable behind the fix permission with confirm; workspace card is mode-aware. |
+
+Tests: 32/32 — new `test/isolation.test.js` locks in per-mode audit/plan/history isolation, reset semantics (live token survives), answer stamping/expiry/permission, AGA-907 wiring, and measure-task lifecycle.

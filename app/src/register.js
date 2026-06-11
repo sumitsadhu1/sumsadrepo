@@ -33,6 +33,12 @@ export function upsertAgent(mode, agent) {
   return saveRegister(mode, reg);
 }
 
+export function removeAgent(mode, id) {
+  const reg = getRegister(mode);
+  reg.agents = reg.agents.filter((a) => a.id !== id);
+  return saveRegister(mode, reg);
+}
+
 export function attestAgent(mode, id, by, note) {
   const reg = getRegister(mode);
   const a = reg.agents.find((x) => x.id === id);

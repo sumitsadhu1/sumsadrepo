@@ -47,7 +47,7 @@ tr:last-child td { border-bottom: none; }
 .bar > i { display: block; height: 100%; border-radius: 7px; }
 .bar.config > i { background: var(--blue); }
 .bar.attest > i { background: var(--amber); }
-.bar span { position: absolute; right: 6px; top: -1px; font-size: 11px; color: var(--muted); }
+.bar span { position: absolute; right: 4px; top: 0; font-size: 11px; color: var(--ink); background: rgba(255,255,255,.88); padding: 0 5px; border-radius: 6px; line-height: 14px; }
 .stageline { display: flex; gap: 8px; margin: 10px 0 18px; }
 .stage-chip { flex: 1; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); }
 .stage-chip.current { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(15,108,189,.15); }

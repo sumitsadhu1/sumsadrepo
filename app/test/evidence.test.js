@@ -76,16 +76,16 @@ test('importPack: rejects with 400-class error and records importer', () => {
 
 test('WAVE 2 HEADLINE: gate 1 clears on measured evidence only (no self-attestation theater)', () => {
   save('evidence-pack-' + MODE, { ...validatePack(freshPack()).pack, importedBy: 'Lead', importedAt: new Date().toISOString() });
-  // Live Graph wave 1 measures AGA-301 + AGA-203; the questionnaire answers AGA-204;
-  // the pack measures the remaining seven gate-1 config checks.
+  // Live Graph wave 1 measures AGA-301 + AGA-203; the questionnaire answers
+  // AGA-204 + AGA-907; the pack measures the remaining seven gate-1 config checks.
   const snap = applyPack(MODE, {
     tenant: { licenses: { e5: false } },
     identity: { caBaseline: true, aiAdminDelegated: true },
-    governance: { sponsorAndForum: true },
+    governance: { sponsorAndForum: true, aiPolicy: true },
   });
   const p = placeStage(evaluate(snap));
   const g1 = p.gateDetail['1'];
-  assert.equal(g1.measured, 10, 'all 10 gate-1 checks measured: ' + JSON.stringify(g1));
+  assert.equal(g1.measured, 11, 'all 11 gate-1 checks measured: ' + JSON.stringify(g1));
   assert.equal(g1.passed, true);
   assert.equal(p.stage, 2, 'a real tenant can now exit Get Ready on evidence');
   clearPack(MODE);
@@ -94,7 +94,7 @@ test('WAVE 2 HEADLINE: gate 1 clears on measured evidence only (no self-attestat
   const sparse = evaluate({
     tenant: { licenses: { e5: false } },
     identity: { caBaseline: true, aiAdminDelegated: true },
-    governance: { sponsorAndForum: true },
+    governance: { sponsorAndForum: true, aiPolicy: true },
   });
   assert.equal(placeStage(sparse).stage, 1);
 });

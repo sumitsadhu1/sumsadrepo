@@ -24,12 +24,21 @@ export function demoState(fixtureName) {
   return save(key, loadFixture(fixtureName));
 }
 
-export function resetDemo(fixtureName) {
-  // null out scoped stores so they re-seed lazily from the fixture
-  save('register-' + fixtureName, null);
-  save('answers-' + fixtureName, null);
-  clearPack(fixtureName);
-  return save('demo-' + fixtureName, loadFixture(fixtureName));
+// Reset the current tenant's workspace. Every store is per-mode (§7.1: switching
+// tenant must never surface another tenant's plan/audit/history). For demo modes
+// the fixture re-seeds; for live, collected snapshot and workspace clear but the
+// encrypted sign-in token is kept.
+export function resetWorkspace(mode) {
+  for (const k of ['register', 'answers', 'plan', 'history', 'audit', 'last-assessment']) {
+    save(k + '-' + mode, null);
+  }
+  clearPack(mode);
+  if (mode === 'live') {
+    save('live-snapshot', null);
+    return { ok: true, cleared: 'live workspace (sign-in kept — collect again to re-scan)' };
+  }
+  save('demo-' + mode, loadFixture(mode));
+  return { ok: true, cleared: `demo tenant ${mode} restored to its fixture` };
 }
 
 // The Configure pipeline in demo form: dry-run shows the diff, apply mutates, verify = re-scan.
@@ -56,13 +65,13 @@ export function fixApply(fixtureName, checkId, approvedBy) {
   const before = getPath(snap, check.fix.demoEffect.path);
   setPath(snap, check.fix.demoEffect.path, check.fix.demoEffect.value);
   save(key, snap);
-  const audit = load('audit', []);
+  const audit = load('audit-' + fixtureName, []);
   audit.push({
     at: new Date().toISOString(), checkId, mode: check.fix.mode,
     setting: check.fix.demoEffect.path, before, after: check.fix.demoEffect.value,
     approvedBy: approvedBy || 'demo-user', environment: fixtureName,
   });
-  save('audit', audit);
+  save('audit-' + fixtureName, audit);
   return { ok: true, before, after: check.fix.demoEffect.value };
 }
 

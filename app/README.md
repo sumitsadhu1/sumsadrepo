@@ -54,13 +54,17 @@ DAG report freshness, RCD/RAC brakes, DLP, unified audit, retention, site lifecy
 
 It writes `evidence-pack.json`; import it under **Settings → Evidence pack** (requires a fix-capable role — importing measured posture carries the same weight as applying a fix). Pack values override collector values for the paths they measure, every evidence line carries provenance (collected-by, imported-by, date), and **packs expire after 30 days** — expired packs stop contributing and their checks fall back to not-collected with a dated note. Sections the operator can't run are simply skipped; nothing is guessed. AGA-409/410 have no API at all and are recorded as **operator-verified** entries that require a named policy reference.
 
-With Graph wave 1 + a full evidence pack + the questionnaire, all 10 gate-1 checks are measurable — a real tenant can clear Stage 1 on evidence (locked in by `test/evidence.test.js`).
+With Graph wave 1 + a full evidence pack + the questionnaire, all 11 gate-1 checks are measurable — a real tenant can clear Stage 1 on evidence (locked in by `test/evidence.test.js`).
+
+## Tenant isolation & questionnaire attestations (v0.7)
+
+Every store — plan, history, audit, last assessment, answers, register, evidence pack — is scoped **per tenant mode**; switching between Contoso/Fabrikam/live never shows another tenant's data, and **Settings → Workspace** resets the current tenant in any mode (live keeps your sign-in token). Questionnaire governance answers are first-class **attestations**: saved with the answerer's identity and timestamp, optional evidence note, expiring after 90 days (an expired "Yes" stops passing and says so in evidence). Changing one requires the attest decision-right. The Overview also calls out **belief vs evidence** when your self-assessed stage differs from the measured placement.
 
 ## What's real vs. demo in this MVP
 
 | Capability | Status |
 |---|---|
-| Declarative check catalog (40 checks), scoring, stage gates | Real — `catalog/checks.json` drives everything |
+| Declarative check catalog (41 checks), scoring, stage gates | Real — `catalog/checks.json` drives everything |
 | Config-vs-attestation two-layer scoring, the gap metric | Real |
 | Plan generation, re-scan auto-close, drift reopen | Real |
 | Register, attestations, expiry staleness | Real (JSON store; Dataverse in the roadmap) |

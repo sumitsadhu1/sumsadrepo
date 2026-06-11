@@ -83,22 +83,32 @@ function renderOverview() {
   const gap = (scores.configScore ?? 0) - (scores.attestScore ?? 0);
   // why this stage: what blocks the next gate
   const nextGate = placement.gateDetail[String(placement.stage)];
+  const gateFailing = nextGate?.failing ?? [];          // defensive: older stored
+  const gateNotCollected = nextGate?.notCollected ?? []; // assessments may lack these
   const byId = Object.fromEntries(S.assessment.results.map((r) => [r.id, r]));
   const tag = (id) => byId[id]?.type === 'attest' ? ' <span class="pill attestpill">attest</span>' : '';
   const whyStage = placement.stage < 4 && nextGate
     ? `<div class="card gap-callout"><h3>To reach Stage ${placement.stage + 1}</h3>
        <p class="muted mono">Gate coverage: ${nextGate.coverage}% measured (needs ≥${nextGate.coverageMin}%)</p>
-       ${nextGate.failing.length
-         ? `<p class="muted">Failing gate checks:</p>` + nextGate.failing.map((id) =>
+       ${gateFailing.length
+         ? `<p class="muted">Failing gate checks:</p>` + gateFailing.map((id) =>
              `<div>• <b class="mono">${id}</b> — ${esc(byId[id]?.title ?? '')}${tag(id)}</div>`).join('')
          : ''}
-       ${nextGate.notCollected.length
-         ? `<p class="muted">Not yet measured (these BLOCK the gate):</p>` + nextGate.notCollected.map((id) =>
+       ${gateNotCollected.length
+         ? `<p class="muted">Not yet measured (these BLOCK the gate):</p>` + gateNotCollected.map((id) =>
              `<div>• <b class="mono">${id}</b> — ${esc(byId[id]?.title ?? '')}</div>`).join('')
          : ''}
-       ${!nextGate.failing.length && !nextGate.notCollected.length ? '<p class="muted">Gate clear — re-run the assessment.</p>' : ''}
+       ${!gateFailing.length && !gateNotCollected.length ? '<p class="muted">Gate clear — re-run the assessment.</p>' : ''}
        </div>`
     : '<div class="card"><h3>Frontier</h3><p class="muted">No exit gate — steady state of earned autonomy.</p></div>';
+  // belief vs evidence: surface the delta between self-assessed and measured stage
+  const believed = Number(S.answers?.selfStage);
+  const beliefCallout = believed && believed !== placement.stage ? `
+    <div class="card ${believed > placement.stage ? 'gap-callout' : ''}"><h3>Belief vs evidence</h3>
+      <p>You assessed yourselves at <b>Stage ${believed}</b> (Questionnaire); the measured placement is <b>Stage ${placement.stage}</b>.</p>
+      <p class="muted">${believed > placement.stage
+        ? 'The gap between perceived and measured readiness is itself a finding — the "To reach Stage ' + (placement.stage + 1) + '" list is what closes it.'
+        : 'You are further along than you believed — consider raising your target stage.'}</p></div>` : '';
   // trend sparkline from history
   const hist = S.history.slice(-12);
   const spark = hist.length >= 2 ? (() => {
@@ -134,6 +144,7 @@ function renderOverview() {
       <div class="card gap-callout"><h3>The gap</h3><div class="big">${gap > 0 ? gap : 0} pts</div><div class="muted">config-ready but governance-untracked — the number most assessments miss</div></div>
       <div class="card"><h3>Unlockable (E5)</h3><div class="big">${scores.unlockable.length}</div><div class="muted">checks gated by licensing${scores.notCollected.length ? ` · ${scores.notCollected.length} not collected in this mode` : ''}</div></div>
     </div>
+    ${beliefCallout}
     <div class="cards" style="grid-template-columns: 1fr 1fr">${whyStage}${spark}</div>
     <div class="card"><h3>Per-control: evidence layer vs decision layer</h3><div class="bars">${bars}</div></div>`;
 }
@@ -205,8 +216,10 @@ window.openFix = async function (checkId) {
 
 window.applyFix = async function (checkId) {
   closeModal();
-  await api('/api/fix/apply', { checkId }); // approval is attributed to the signed-in identity server-side
-  toast(checkId + ' applied — re-scan verified, plan updated');
+  try {
+    await api('/api/fix/apply', { checkId }); // approval is attributed to the signed-in identity server-side
+    toast(checkId + ' applied — re-scan verified, plan updated');
+  } catch (e) { toast(e.message); }
   await refresh();
 };
 
@@ -247,7 +260,10 @@ window.genPlan = async function () {
   try { await api('/api/plan/generate', {}); toast('Plan generated'); await refresh(); $('[data-tab=plan]').click(); }
   catch (e) { toast(e.message); }
 };
-window.taskDone = async function (id) { await api('/api/plan/task', { taskId: id, status: 'done' }); await refresh(); };
+window.taskDone = async function (id) {
+  try { await api('/api/plan/task', { taskId: id, status: 'done' }); } catch (e) { toast(e.message); }
+  await refresh();
+};
 
 /* ---------- Register ---------- */
 function renderRegister() {
@@ -265,9 +281,10 @@ function renderRegister() {
         ${a.lastAttestedBy ? `<br><span class="muted">by ${esc(a.lastAttestedBy)}</span>` : ''}
         ${d != null && !stale ? `<br><span class="muted">expires in ${90 - d}d</span>` : ''}
         ${a.attestNote ? `<br><span class="muted">"${esc(a.attestNote)}"</span>` : ''}</td>
-      <td>${S.perms?.attest
+      <td class="row-actions">${S.perms?.attest
         ? `<button class="small" onclick="attest('${a.id}', '${esc(a.name)}')">Attest</button>`
-        : `<span class="muted" title="Your role cannot attest — attestation is a decision-right">no attest right</span>`}</td>
+        : `<button class="small" disabled title="Attesting requires Global Admin, AI Governance Lead, Compliance Admin, or Agent Owner">Attest</button>`}
+        ${S.perms?.fix ? `<button class="small" title="Remove this register entry" onclick="removeAgent('${a.id}', '${esc(a.name)}')">✕</button>` : ''}</td>
     </tr>`;
   }).join('');
   el.innerHTML = `
@@ -298,6 +315,16 @@ window.addAgent = async function (ev) {
   await refresh();
   return false;
 };
+window.removeAgent = async function (id, name) {
+  if (!confirm(`Remove "${name}" from the register? Its attestation history goes with it.`)) return;
+  try {
+    await api('/api/register/remove', { id });
+    await api('/api/assess', {});
+    toast('Removed — assessment re-run');
+  } catch (e) { toast(e.message); }
+  await refresh();
+};
+
 window.attest = function (id, name) {
   $('#modal-card').innerHTML = `
     <h2>Attest — ${esc(name)}</h2>
@@ -322,36 +349,59 @@ window.doAttest = async function (id) {
 };
 
 /* ---------- Questionnaire ---------- */
+const ansVal = (a) => (a && typeof a === 'object') ? a.v : a; // attest answers are {v, by, at, note}
+
+function answerStamp(a) {
+  if (!a || typeof a !== 'object' || !a.at) {
+    return (a !== undefined && a !== null) ? '<div class="muted mono">seeded/unattributed — re-save to attribute and date this attestation</div>' : '';
+  }
+  const age = Math.floor((Date.now() - Date.parse(a.at)) / 86400000);
+  const expired = age > 90;
+  return `<div class="muted mono ${expired ? 'warn' : ''}">
+    ${expired ? 'EXPIRED — ' : ''}attested by ${esc(a.by ?? 'unknown')} on ${new Date(a.at).toLocaleDateString()}
+    ${expired ? `(${age}d ago, limit 90d — re-affirm below)` : `(expires in ${90 - age}d)`}
+    ${a.note ? ` · "${esc(a.note)}"` : ''}</div>`;
+}
+
 function renderQuestionnaire() {
   const el = $('#tab-questionnaire');
+  const canAttest = !!S.perms?.attest;
   const blocks = S.questions.map((q) => {
-    const a = S.answers[q.id];
+    const raw = S.answers[q.id];
+    const a = ansVal(raw);
     if (q.type === 'bool') {
       return `<div class="qq"><div class="q">${esc(q.question)}</div>
-        <label><input type="radio" name="${q.id}" value="true" ${a === true ? 'checked' : ''}> Yes</label>
-        <label><input type="radio" name="${q.id}" value="false" ${a === false ? 'checked' : ''}> No / don't know</label>
+        <label><input type="radio" name="${q.id}" value="true" ${a === true ? 'checked' : ''} ${canAttest ? '' : 'disabled'}> Yes</label>
+        <label><input type="radio" name="${q.id}" value="false" ${a === false ? 'checked' : ''} ${canAttest ? '' : 'disabled'}> No / don't know</label>
+        ${canAttest ? `<input name="note-${q.id}" placeholder="Optional evidence note or link (policy doc, drill record, minutes…)" value="${esc(raw?.note ?? '')}" style="width:100%;margin-top:6px">` : ''}
+        ${answerStamp(raw)}
         ${q.hint ? `<div class="muted">${esc(q.hint)}</div>` : ''}</div>`;
     }
     const opts = q.options.map((o) => `<label><input type="radio" name="${q.id}" value="${esc(o.value)}" ${String(a) === String(o.value) ? 'checked' : ''}> ${esc(o.label)}</label><br>`).join('');
     return `<div class="qq"><div class="q">${esc(q.question)}</div>${opts}</div>`;
   }).join('');
   el.innerHTML = `
-    <div class="note">Answers seed the attestation layer (governance signals no API can read) and set your target stage. After saving, re-run the assessment.</div>
+    <div class="note">Governance answers ARE attestations: saved with your identity and timestamp, expiring after 90 days like register attestations. Add an evidence note where you can — an unevidenced "Yes" is the weakest signal this tool accepts.
+    ${canAttest ? '' : '<br><b>Your role can set stages/targets but cannot change governance attestations</b> (requires Global Admin, AI Governance Lead, Compliance Admin, or Agent Owner).'}</div>
     <form onsubmit="return saveAnswers(event)">${blocks}
     <button class="primary">Save answers</button></form>`;
 }
 
 window.saveAnswers = async function (ev) {
   ev.preventDefault();
-  const out = {};
+  const answers = {}, notes = {};
   for (const q of S.questions) {
     const v = ev.target.querySelector(`[name=${q.id}]:checked`)?.value;
     if (v === undefined) continue;
-    out[q.id] = q.type === 'bool' ? v === 'true' : (isNaN(Number(v)) ? v : Number(v));
+    answers[q.id] = q.type === 'bool' ? v === 'true' : (isNaN(Number(v)) ? v : Number(v));
+    const n = ev.target.querySelector(`[name=note-${q.id}]`)?.value?.trim();
+    if (n !== undefined) notes[q.id] = n;
   }
-  await api('/api/answers', out);
-  await api('/api/assess', {});
-  toast('Saved — assessment re-run automatically');
+  try {
+    await api('/api/answers', { answers, notes });
+    await api('/api/assess', {});
+    toast('Saved — attributed to you; assessment re-run automatically');
+  } catch (e) { toast(e.message); }
   await refresh();
   return false;
 };
@@ -382,9 +432,12 @@ function renderSettings() {
   el.innerHTML = `
     <div class="cards">
       <div class="card">
-        <h3>Demo tenants</h3>
-        <p class="muted">Contoso (early journey) and Fabrikam (governing agents). Demo fixes persist; reset restores the original fixture.</p>
-        <button onclick="resetDemo()">Reset current demo tenant</button>
+        <h3>Workspace</h3>
+        ${S.settings.mode === 'live'
+          ? `<p class="muted">Clears this live tenant's plan, history, audit trail, answers, register, and evidence pack. Your sign-in token is kept — collect again to re-scan. Requires a fix-capable role.</p>
+             <button onclick="resetWorkspace()">Clear live workspace</button>`
+          : `<p class="muted">Demo tenants: Contoso (early journey) and Fabrikam (governing agents). Demo fixes persist; reset restores the original fixture and clears this tenant's plan, history, and audit.</p>
+             <button onclick="resetWorkspace()">Reset current demo tenant</button>`}
       </div>
       <div class="card">
         <h3>Live tenant (read-only)</h3>
@@ -439,7 +492,13 @@ window.clearPack = async function () {
   await refresh();
 };
 
-window.resetDemo = async function () { await api('/api/demo/reset', {}); toast('Demo tenant reset — re-run the assessment'); await refresh(); };
+window.resetWorkspace = async function () {
+  try {
+    const r = await api('/api/workspace/reset', {});
+    toast('Cleared: ' + r.cleared + ' — re-run the assessment');
+  } catch (e) { toast(e.message); }
+  await refresh();
+};
 
 window.liveStart = async function () {
   const tenantId = $('#live-tenant').value.trim(), clientId = $('#live-client').value.trim();
@@ -473,9 +532,14 @@ document.querySelectorAll('#tabs button').forEach((b) => b.addEventListener('cli
 }));
 
 $('#mode-select').addEventListener('change', async (e) => {
-  await api('/api/settings', { mode: e.target.value });
-  toast('Tenant mode: ' + e.target.value + ' — run assessment');
-  await refresh();
+  try {
+    await api('/api/settings', { mode: e.target.value });
+    toast('Tenant mode: ' + e.target.value + ' — run assessment');
+    await refresh();
+  } catch (err) {
+    // 401 after a server restart: api() has already shown the login overlay
+    if (err.message !== 'Sign in required') toast(err.message);
+  }
 });
 
 $('#btn-report').addEventListener('click', () => window.open('/api/report', '_blank'));

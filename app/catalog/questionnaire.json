@@ -10,17 +10,11 @@
     {"value": 3, "label": "Stage 3 — Govern Agents"},
     {"value": 4, "label": "Stage 4 — Frontier"}
   ]},
-  {"id": "decisionRightsKnown", "type": "bool", "question": "Today, can you name who has the right to approve, change, promote, fund, or retire an agent?", "hint": "\"No / don't know\" is a common and useful answer — it seeds the Stage 3 plan."},
   {"id": "sponsorAndForum", "type": "bool", "question": "Is there a named executive sponsor AND a governance forum that meets?", "attests": "governance.sponsorAndForum"},
   {"id": "aiPolicy", "type": "bool", "question": "Is there an approved AI acceptable-use policy?", "attests": "governance.aiPolicy"},
   {"id": "irRunbook", "type": "bool", "question": "Is there an incident-response runbook for agent misbehavior, with a named owner?", "attests": "governance.irRunbook"},
   {"id": "killSwitchTested", "type": "bool", "question": "Have you ever DRILLED disabling an agent and revoking its connector (kill switch), within a target time?", "attests": "governance.killSwitchTested"},
   {"id": "promotionGates", "type": "bool", "question": "Do promotion/funding decisions for agents run through an approval workflow that leaves evidence?", "attests": "governance.promotionGates"},
   {"id": "cadenceOperating", "type": "bool", "question": "Does a governance cadence operate (monthly/quarterly forum, agenda from live data, minuted decisions)?", "attests": "governance.cadenceOperating"},
-  {"id": "decisionRights", "type": "bool", "question": "Are decision rights documented per risk tier (approve / change / promote / fund / retire)?", "attests": "governance.decisionRights"},
-  {"id": "autonomyAppetite", "type": "choice", "question": "What is your autonomy appetite for agents?", "options": [
-    {"value": "suggest", "label": "Suggest only — humans act"},
-    {"value": "approve", "label": "Act with human approval"},
-    {"value": "autonomous", "label": "Act autonomously within boundaries"}
-  ]}
+  {"id": "decisionRights", "type": "bool", "question": "Are decision rights documented per risk tier (approve / change / promote / fund / retire)?", "attests": "governance.decisionRights"}
 ]
