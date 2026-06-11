@@ -16,6 +16,8 @@ import { ensureAccessKey, verifyKey, createSession, getSession, canDo, permsFor 
 import { renderReport } from './src/report.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
+// Permission denials must surface as 403, not a generic 400.
+const forbid = (msg) => Object.assign(new Error(msg), { status: 403 });
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1'; // localhost-only unless explicitly overridden
 const QUESTIONS = loadCatalog('questionnaire');
@@ -83,12 +85,12 @@ const routes = {
     return { plan: generatePlan(a.results, Number(target)) };
   },
   'POST /api/plan/task': (b, who) => {
-    if (!canDo(who?.role, 'plan')) throw new Error(`Role "${who?.role}" cannot update plan tasks — requires a plan-managing role`);
+    if (!canDo(who?.role, 'plan')) throw forbid(`Role "${who?.role}" cannot update plan tasks — requires a plan-managing role`);
     return { plan: setTaskStatus(b.taskId, b.status, who?.name) };
   },
   'POST /api/register/agent': (b) => ({ register: upsertAgent(getSettings().mode, b) }),
   'POST /api/register/attest': (b, who) => {
-    if (!canDo(who?.role, 'attest')) throw new Error(`Role "${who?.role}" cannot attest — attestation is a decision-right (Global Admin, AI Governance Lead, Compliance Admin, Agent Owner)`);
+    if (!canDo(who?.role, 'attest')) throw forbid(`Role "${who?.role}" cannot attest — attestation is a decision-right (Global Admin, AI Governance Lead, Compliance Admin, Agent Owner)`);
     return { register: attestAgent(getSettings().mode, b.id, `${who?.name} (${who?.role})`, b.note) };
   },
   'POST /api/demo/reset': () => {
@@ -103,7 +105,7 @@ const routes = {
     return { preview: fixPreview(s.mode, b.checkId) };
   },
   'POST /api/fix/apply': (b, who) => {
-    if (!canDo(who?.role, 'fix')) throw new Error(`Role "${who?.role}" cannot approve configuration changes — requires Global Admin, Security Admin, or AI Governance Lead`);
+    if (!canDo(who?.role, 'fix')) throw forbid(`Role "${who?.role}" cannot approve configuration changes — requires Global Admin, Security Admin, or AI Governance Lead`);
     const s = getSettings();
     if (s.mode === 'live') throw new Error('Configuration is demo-only in this MVP — live mode is read-only by design');
     const r = fixApply(s.mode, b.checkId, `${who?.name} (${who?.role})`);
@@ -194,7 +196,7 @@ http.createServer(async (req, res) => {
         res.end(JSON.stringify(out));
       }
     } catch (e) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.writeHead(e.status || 400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: e.message }));
     }
     return;

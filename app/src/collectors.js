@@ -83,8 +83,11 @@ const GRAPH = 'https://graph.microsoft.com/v1.0';
 const GRAPH_BETA = 'https://graph.microsoft.com/beta';
 const SCOPES = [
   'Organization.Read.All',          // licensing
-  'Policy.Read.All',                // conditional access
+  'Policy.Read.All',                // conditional access, authorization policy
   'Application.Read.All',           // agent/app identities, credentials
+  'Directory.Read.All',             // directory roles (AI Administrator delegation)
+  'AuditLogsQuery.Read.All',        // Purview audit search reachability
+  'SharePointTenantSettings.Read.All', // tenant sharing posture (context evidence)
   'InformationProtectionPolicy.Read', // sensitivity labels (best effort)
   'offline_access',
 ].join(' ');
@@ -170,6 +173,20 @@ async function graphGetAll(token, url, maxPages = 10) {
   return out;
 }
 
+// GET a single (non-collection) resource; null on any failure so callers report "not collected".
+async function graphGetOne(token, url) {
+  const next = url.startsWith('http') ? url : GRAPH + url;
+  let r;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    r = await fetch(next, { headers: { Authorization: 'Bearer ' + token } });
+    if (r.status !== 429 && r.status !== 503) break;
+    const wait = Number(r.headers.get('retry-after') || 2 ** attempt) * 1000;
+    await new Promise((res) => setTimeout(res, wait));
+  }
+  if (!r.ok) return null;
+  return r.json();
+}
+
 // ---- pure transforms (unit-tested) ----
 
 export function transformCaPolicies(policies) {
@@ -242,42 +259,127 @@ export function transformSkus(skuList) {
   };
 }
 
+// AGA-203: AI Administrator delegated. Activated directory roles only — the role
+// template existing is not delegation; members are.
+export function transformDirectoryRoles(roles) {
+  if (!roles) return null;
+  const byName = (n) => roles.find((r) => (r.displayName || '').toLowerCase() === n);
+  const ai = byName('ai administrator');
+  const ga = byName('global administrator');
+  const aiMembers = ai?.members?.length ?? 0;
+  const gaMembers = ga?.members?.length ?? 0;
+  return {
+    aiAdminDelegated: aiMembers > 0,
+    evidence: {
+      'AGA-203': [
+        ai ? `AI Administrator role is active with ${aiMembers} member(s)` : 'AI Administrator role is not activated in this tenant',
+        ga ? `Global Administrator has ${gaMembers} member(s)${gaMembers > 5 ? ' — review for least privilege' : ''}` : null,
+      ].filter(Boolean),
+    },
+  };
+}
+
+// AGA-901: Purview audit reachability. The audit search API only answers when the
+// unified audit store is on; Copilot/agent interactions are recorded automatically
+// while auditing is enabled. Evidence states the proxy nature explicitly.
+export function transformAuditQueries(queries) {
+  if (queries === null || queries === undefined) return null;
+  return {
+    auditCopilotInteractions: true,
+    evidence: {
+      'AGA-901': [
+        `Purview Audit Search API reachable (${queries.length} saved audit ${queries.length === 1 ? 'query' : 'queries'})`,
+        'Proxy measurement: auditing is on and records Copilot/agent interactions automatically — run a sample CopilotInteraction query in the Purview portal for full assurance',
+      ],
+    },
+  };
+}
+
+// Context-only evidence: tenant sharing posture informs the AGA-402 conversation,
+// but RCD/RAC state is not exposed by Graph — the check stays not-collected.
+export function transformSpoSettings(s) {
+  if (!s) return null;
+  return {
+    evidence: {
+      'AGA-402': [
+        `Tenant external sharing capability: ${s.sharingCapability ?? 'unknown'}`,
+        `Resharing by external users: ${s.isResharingByExternalUsersEnabled ? 'enabled' : 'disabled'}`,
+        'Context only — Restricted Content Discovery / restricted access control state is not exposed by Graph; verify in SharePoint admin',
+      ],
+    },
+  };
+}
+
+// Context-only evidence for AGA-410: guest-invite posture from the authorization
+// policy; Teams three-tier protection itself is not exposed by Graph.
+export function transformAuthorizationPolicy(p) {
+  if (!p) return null;
+  return {
+    evidence: {
+      'AGA-410': [
+        `Guest invites allowed from: ${p.allowInvitesFrom ?? 'unknown'}`,
+        'Context only — Teams three-tier protection is not exposed by Graph; verify in the Teams admin center',
+      ],
+    },
+  };
+}
+
 // Collect what the consented read-only scopes can prove; leave the rest undefined
 // so the engine reports "not collected" instead of guessing.
 export async function liveCollect() {
   const t = await ensureToken();
 
-  const [org, skus, caPolicies, apps, labels] = await Promise.all([
+  const [org, skus, caPolicies, apps, labels, roles, auditQueries, spoSettings, authPolicy] = await Promise.all([
     graphGetAll(t, '/organization'),
     graphGetAll(t, '/subscribedSkus'),
     graphGetAll(t, '/identity/conditionalAccess/policies'),
     graphGetAll(t, '/applications?$expand=owners($select=id)&$select=id,displayName,passwordCredentials&$top=100', 20),
     graphGetAll(t, GRAPH_BETA + '/security/informationProtection/sensitivityLabels'), // best effort
+    graphGetAll(t, '/directoryRoles?$expand=members($select=id)'),
+    graphGetAll(t, '/security/auditLog/queries'),                // [] = reachable+empty, null = not consented
+    graphGetOne(t, '/admin/sharepoint/settings'),
+    graphGetOne(t, '/policies/authorizationPolicy'),
   ]);
 
   const lic = transformSkus(skus);
   const ca = transformCaPolicies(caPolicies);
   const appx = transformApplications(apps);
+  const dirx = transformDirectoryRoles(roles);
+  const audx = transformAuditQueries(auditQueries);
+  const spox = transformSpoSettings(spoSettings);
+  const authx = transformAuthorizationPolicy(authPolicy);
+
+  const purview = {
+    ...(labels !== null ? { sensitivityLabelsPublished: (labels ?? []).length > 0 } : {}),
+    ...(audx ? { auditCopilotInteractions: audx.auditCopilotInteractions } : {}),
+  };
 
   const snapshot = {
     tenantName: (org?.[0]?.displayName || 'Live tenant') + ' (live scan)',
     scannedAt: new Date().toISOString(),
     tenant: { licenses: lic.licenses },
-    identity: { caBaseline: ca.caBaseline, riskBasedCAandPIM: ca.riskBasedCAandPIM },
+    identity: {
+      caBaseline: ca.caBaseline,
+      riskBasedCAandPIM: ca.riskBasedCAandPIM,
+      ...(dirx ? { aiAdminDelegated: dirx.aiAdminDelegated } : {}),
+    },
     agents: apps ? {
       orphanedAgentIdentities: appx.orphanedAgentIdentities,
       credentialRotation: appx.credentialRotation,
     } : undefined,
-    purview: labels !== null ? {
-      sensitivityLabelsPublished: (labels ?? []).length > 0,
-    } : undefined,
+    purview: Object.keys(purview).length ? purview : undefined,
     evidence: {
       ...lic.evidence,
       ...ca.evidence,
       ...(apps ? appx.evidence : {}),
       ...(labels?.length ? { 'AGA-403': labels.slice(0, 10).map((l) => `Label: "${l.name ?? l.displayName}"`) } : {}),
+      ...(dirx?.evidence ?? {}),
+      ...(audx?.evidence ?? {}),
+      ...(spox?.evidence ?? {}),   // context-only: AGA-402 stays not-collected
+      ...(authx?.evidence ?? {}),  // context-only: AGA-410 stays not-collected
     },
-    // sharepoint/teams/finops + remaining purview intentionally absent → "not collected".
+    // sharepoint DAG/RCD/lifecycle, teams protection, finops + remaining purview:
+    // no Graph surface exists → honestly "not collected" (context evidence where possible).
   };
   return save('live-snapshot', snapshot);
 }

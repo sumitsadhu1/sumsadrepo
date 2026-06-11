@@ -40,9 +40,9 @@ npm test
 ## Live mode (your real tenant, read-only)
 
 1. In [Entra admin center](https://entra.microsoft.com) → App registrations → **New registration**: single tenant, no redirect URI needed; under **Authentication** enable **Allow public client flows**.
-2. API permissions → Microsoft Graph → **Delegated** → add `Organization.Read.All`, `Policy.Read.All`, `Application.Read.All`, `InformationProtectionPolicy.Read` → grant admin consent.
+2. API permissions → Microsoft Graph → **Delegated** → add `Organization.Read.All`, `Policy.Read.All`, `Application.Read.All`, `Directory.Read.All`, `AuditLogsQuery.Read.All`, `SharePointTenantSettings.Read.All`, `InformationProtectionPolicy.Read` → grant admin consent.
 3. In the app: **Settings → Live tenant** → paste Tenant ID + App (client) ID → **Sign in with device code** → enter the code at microsoft.com/devicelogin.
-4. **Run assessment.** Live collectors currently cover: licensing (Copilot seats, E3/E5/SAM — with per-SKU evidence), Conditional Access baseline + risk policies (with policy names as evidence), app/agent identities (ownerless identities and long-lived secrets, named), and sensitivity labels (best effort). Checks the consented scopes can't prove report honestly as **not collected** — live mode never writes anything.
+4. **Run assessment.** Live collectors currently cover: licensing (Copilot seats, E3/E5/SAM — with per-SKU evidence), Conditional Access baseline + risk policies (policy names as evidence), AI Administrator delegation vs Global Admin sprawl (AGA-203), Purview audit reachability (AGA-901, labelled as a proxy measurement), app/agent identities (ownerless identities and long-lived secrets, named), and sensitivity labels (best effort). Tenant sharing posture and guest-invite settings are collected as **context evidence** on AGA-402/AGA-410 without flipping those checks — Graph does not expose RCD/RAC or Teams tier protection, so they stay honestly **not collected**. Live mode never writes anything.
 
 ## What's real vs. demo in this MVP
 
@@ -53,7 +53,7 @@ npm test
 | Plan generation, re-scan auto-close, drift reopen | Real |
 | Register, attestations, expiry staleness | Real (JSON store; Dataverse in the roadmap) |
 | Configure pipeline (dry-run → approve → apply → verify → audit) | Real pipeline, **demo targets only** — live writes are deliberately out of MVP scope (see Reader/Operator design in docs/05) |
-| Live tenant collection | Real for licensing + Conditional Access; remaining collectors are the Phase-1 backlog |
+| Live tenant collection | Real for licensing, Conditional Access, directory-role delegation, audit reachability, app identities, labels; SharePoint/Teams posture as context evidence; SPO admin-API + Purview-PowerShell collectors are the remaining backlog |
 
 ## Layout
 

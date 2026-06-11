@@ -2,7 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { encrypt, decrypt } from '../src/secrets.js';
 import { ensureAccessKey, verifyKey, createSession, checkSession } from '../src/auth.js';
-import { transformCaPolicies, transformApplications, transformSkus } from '../src/collectors.js';
+import {
+  transformCaPolicies, transformApplications, transformSkus,
+  transformDirectoryRoles, transformAuditQueries, transformSpoSettings, transformAuthorizationPolicy,
+} from '../src/collectors.js';
 import { evaluate } from '../src/engine.js';
 
 test('secrets: encrypt/decrypt round-trips; tampering fails closed', () => {
@@ -56,6 +59,40 @@ test('sku transform: copilot seats summed, tiers detected', () => {
   assert.equal(out.licenses.copilotSeats, 100);
   assert.equal(out.licenses.e5, true);
   assert.ok(out.evidence['AGA-101'][0].includes('80 assigned'));
+});
+
+test('directory-roles transform: AI Administrator delegation measured, GA count in evidence', () => {
+  const out = transformDirectoryRoles([
+    { displayName: 'AI Administrator', members: [{ id: 'u1' }, { id: 'u2' }] },
+    { displayName: 'Global Administrator', members: [{ id: 'u1' }, { id: 'u2' }, { id: 'u3' }, { id: 'u4' }, { id: 'u5' }, { id: 'u6' }] },
+  ]);
+  assert.equal(out.aiAdminDelegated, true);
+  assert.ok(out.evidence['AGA-203'][0].includes('2 member(s)'));
+  assert.ok(out.evidence['AGA-203'][1].includes('review for least privilege'), 'GA > 5 must flag least-privilege review');
+
+  const none = transformDirectoryRoles([{ displayName: 'Global Administrator', members: [{ id: 'u1' }] }]);
+  assert.equal(none.aiAdminDelegated, false);
+  assert.ok(none.evidence['AGA-203'][0].includes('not activated'));
+
+  assert.equal(transformDirectoryRoles(null), null, 'collection failure must not fabricate a measurement');
+});
+
+test('audit transform: reachable API measures AGA-901 as proxy; failure stays not-collected', () => {
+  const out = transformAuditQueries([]); // reachable, no saved queries — still proves the audit store answers
+  assert.equal(out.auditCopilotInteractions, true);
+  assert.ok(out.evidence['AGA-901'].some((e) => e.includes('Proxy measurement')), 'evidence must declare the proxy nature');
+  assert.equal(transformAuditQueries(null), null);
+});
+
+test('context-only transforms attach evidence without flipping any check', () => {
+  const spo = transformSpoSettings({ sharingCapability: 'externalUserSharingOnly', isResharingByExternalUsersEnabled: false });
+  assert.ok(!('interimBrakes' in spo), 'must not fabricate an AGA-402 measurement');
+  assert.ok(spo.evidence['AGA-402'].some((e) => e.includes('Context only')));
+
+  const auth = transformAuthorizationPolicy({ allowInvitesFrom: 'adminsAndGuestInviters' });
+  assert.ok(auth.evidence['AGA-410'][0].includes('adminsAndGuestInviters'));
+  assert.equal(transformSpoSettings(null), null);
+  assert.equal(transformAuthorizationPolicy(null), null);
 });
 
 test('evidence flows through evaluation onto results', () => {

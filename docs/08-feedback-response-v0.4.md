@@ -30,3 +30,28 @@ Disposition of the UI-designer + M365 Solution Architect review dated 2026-06-11
 ## Reviewer's confidence statement, revisited
 
 The review put confidence in the readiness badge at ~20–30% self-administered because sparse data inflated the verdict. With the coverage floor, blocking unmeasured checks, paired coverage on every score, and measured/attested separation, **the badge can no longer overstate** — it can only understate until live collectors widen coverage. The remaining path above 80% confidence is exactly §2.5.5: real Stage-1/2 collectors.
+
+---
+
+# v0.5 — response to the re-review (verification update of 2026-06-11)
+
+The re-review confirmed all P0/P1 fixes empirically and left two items. Both are addressed:
+
+## RBAC denials now return 403 (was 400, flagged as cosmetic)
+
+`server.js` attaches `status: 403` to permission-denial errors; the catch-all uses it. 401 remains "not signed in", 403 is now "signed in but not permitted", 400 is malformed/other.
+
+## Live collectors — wave 1 of §2.5.5 (the long pole)
+
+New read-only Graph collectors, each with a pure unit-tested transform, endpoints verified against Microsoft Learn (v1.0):
+
+| Check | Collector | Honesty notes |
+|---|---|---|
+| **AGA-203** AI Administrator delegated | `GET /directoryRoles?$expand=members` (`Directory.Read.All`) | Measures: AI Administrator role active with members. Evidence includes Global Admin member count with a least-privilege flag when > 5. |
+| **AGA-901** Purview Audit captures Copilot interactions | `GET /security/auditLog/queries` (`AuditLogsQuery.Read.All`) | **Labelled a proxy measurement in its own evidence**: the audit search API answers only when the unified audit store is on, and Copilot/agent interactions are recorded automatically while auditing is enabled. Consent missing → not collected, never guessed. |
+| AGA-402 (context only) | `GET /admin/sharepoint/settings` (`SharePointTenantSettings.Read.All`) | Tenant sharing capability + external-resharing posture attached as evidence; **the check stays not-collected** because Graph does not expose RCD/RAC state. |
+| AGA-410 (context only) | `GET /policies/authorizationPolicy` (already-consented `Policy.Read.All`) | Guest-invite posture as evidence; check stays not-collected (Teams tier protection has no Graph surface). |
+
+Gate-1 measured coverage in a fully-consented live scan rises from 2/8 to 3/8 — still below the 80% floor, so a live tenant still reads **Stage 1, partial coverage**, which is the correct verdict. The remaining gate-1 checks (DAG reports, RCD/RAC, DLP, site lifecycle, Teams tiers) have **no Microsoft Graph surface**: closing them requires the SharePoint admin REST API and Security & Compliance PowerShell, which is wave 2.
+
+Tests: 23/23 (3 new transform tests assert that collection failures return `null` — a failed collector can never fabricate a measurement, and context-only transforms never flip a check).
