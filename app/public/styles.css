@@ -76,3 +76,10 @@ form.inline-form { display: grid; grid-template-columns: repeat(auto-fit, minmax
 ul.evidence { margin: 6px 0 0; padding-left: 18px; font-size: 12px; color: #374151; }
 ul.evidence li { margin: 1px 0; }
 code { background: #f0f2f4; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+.mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
+.warn { background: #fff4e0; color: var(--amber); border-radius: 6px; padding: 5px 9px; margin-top: 8px; font-size: 12px; }
+.pill.attestpill { background: #fff4e0; color: var(--amber); }
+.filterbar { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+.filterbar input { flex: 0 1 340px; }
+.xwline { font-size: 10.5px; letter-spacing: .2px; }
+.stage-chip .mono { display: block; margin-top: 4px; font-size: 10.5px; color: var(--muted); }

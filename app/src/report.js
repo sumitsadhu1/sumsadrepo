@@ -52,9 +52,10 @@ th{background:#f4f6f8;font-size:11px;text-transform:uppercase;letter-spacing:.4p
 <div class="meta">${esc(assessment.tenantName)} · generated ${new Date().toLocaleString()} by ${esc(generatedBy)} · assessment of ${new Date(assessment.at).toLocaleString()}</div>
 <p class="quote">"Who has the right to approve, change, promote, fund, or retire an agent?"</p>
 <div class="kpis">
-  <div class="kpi"><b>Stage ${placement.stage}</b><span>${esc(stage?.name)} — ${esc(stage?.tagline)}</span></div>
-  <div class="kpi"><b>${scores.configScore ?? '—'}%</b><span>Config score (tenant scan)</span></div>
-  <div class="kpi"><b>${scores.attestScore ?? '—'}%</b><span>Attestation completeness</span></div>
+  <div class="kpi"><b>Stage ${placement.stage}</b><span>${esc(stage?.name)} — ${esc(stage?.tagline)}<br>
+    ${Object.entries(placement.gateDetail).map(([g, d]) => `Gate ${g}: ${d.measured}/${d.total} measured${d.passed ? ' ✓' : ''}`).join(' · ')}</span></div>
+  <div class="kpi"><b>${scores.configScore ?? '—'}%</b><span>Config score — MEASURED evidence, of ${scores.configCoverage?.measured ?? '?'}/${scores.configCoverage?.inScope ?? '?'} checks collected${(scores.configCoverage && scores.configCoverage.measured < scores.configCoverage.inScope) ? ' (PARTIAL COVERAGE)' : ''}</span></div>
+  <div class="kpi"><b>${scores.attestScore ?? '—'}%</b><span>Attestation completeness — SELF-ATTESTED by owners, not independently verified</span></div>
   <div class="kpi gap"><b>${gap} pts</b><span>Governance gap (config-ready but untracked)</span></div>
 </div>
 ${plan ? `<p><b>Plan:</b> targeting Stage ${plan.targetStage} — ${doneTasks} tasks done, ${openTasks} open.</p>` : ''}

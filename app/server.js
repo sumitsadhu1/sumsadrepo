@@ -12,7 +12,7 @@ import {
   getSettings, saveSettings, buildSnapshot, resetDemo,
   fixPreview, fixApply, deviceCodeStart, deviceCodePoll, liveCollect,
 } from './src/collectors.js';
-import { ensureAccessKey, verifyKey, createSession, getSession } from './src/auth.js';
+import { ensureAccessKey, verifyKey, createSession, getSession, canDo, permsFor } from './src/auth.js';
 import { renderReport } from './src/report.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -62,6 +62,7 @@ function runAssessment() {
 const routes = {
   'GET /api/state': (_b, who) => ({
     identity: who,
+    perms: permsFor(who?.role),
     settings: getSettings(),
     stages: STAGES,
     questions: QUESTIONS,
@@ -81,9 +82,15 @@ const routes = {
     const target = b.targetStage || getAnswers().targetStage || 4;
     return { plan: generatePlan(a.results, Number(target)) };
   },
-  'POST /api/plan/task': (b, who) => ({ plan: setTaskStatus(b.taskId, b.status, who?.name) }),
+  'POST /api/plan/task': (b, who) => {
+    if (!canDo(who?.role, 'plan')) throw new Error(`Role "${who?.role}" cannot update plan tasks — requires a plan-managing role`);
+    return { plan: setTaskStatus(b.taskId, b.status, who?.name) };
+  },
   'POST /api/register/agent': (b) => ({ register: upsertAgent(getSettings().mode, b) }),
-  'POST /api/register/attest': (b, who) => ({ register: attestAgent(getSettings().mode, b.id, `${who?.name} (${who?.role})`, b.note) }),
+  'POST /api/register/attest': (b, who) => {
+    if (!canDo(who?.role, 'attest')) throw new Error(`Role "${who?.role}" cannot attest — attestation is a decision-right (Global Admin, AI Governance Lead, Compliance Admin, Agent Owner)`);
+    return { register: attestAgent(getSettings().mode, b.id, `${who?.name} (${who?.role})`, b.note) };
+  },
   'POST /api/demo/reset': () => {
     const s = getSettings();
     if (s.mode === 'live') throw new Error('Reset applies to demo tenants only');
@@ -96,10 +103,27 @@ const routes = {
     return { preview: fixPreview(s.mode, b.checkId) };
   },
   'POST /api/fix/apply': (b, who) => {
+    if (!canDo(who?.role, 'fix')) throw new Error(`Role "${who?.role}" cannot approve configuration changes — requires Global Admin, Security Admin, or AI Governance Lead`);
     const s = getSettings();
     if (s.mode === 'live') throw new Error('Configuration is demo-only in this MVP — live mode is read-only by design');
     const r = fixApply(s.mode, b.checkId, `${who?.name} (${who?.role})`);
     return { result: r, assessment: runAssessment(), plan: getPlan() };
+  },
+  'GET /api/export/findings.csv': () => {
+    const a = load('last-assessment', null);
+    if (!a) throw new Error('Run an assessment first');
+    const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const rows = [['id', 'control', 'stage', 'tier', 'type', 'status', 'title', 'persona', 'evidence']
+      .join(',')];
+    for (const r of a.results) {
+      rows.push([r.id, r.controlName, r.stage, r.tier, r.type, r.status, q(r.title), q(r.persona), q((r.evidence ?? []).join(' | '))].join(','));
+    }
+    return { __raw: rows.join('\n'), __type: 'text/csv', __name: 'findings.csv' };
+  },
+  'GET /api/export/assessment.json': () => {
+    const a = load('last-assessment', null);
+    if (!a) throw new Error('Run an assessment first');
+    return { __raw: JSON.stringify({ assessment: a, plan: getPlan(), register: getRegister(getSettings().mode) }, null, 2), __type: 'application/json', __name: 'assessment.json' };
   },
   'POST /api/live/start': async (b) => deviceCodeStart(b.tenantId, b.clientId),
   'POST /api/live/poll': async () => deviceCodePoll(),
@@ -162,8 +186,13 @@ http.createServer(async (req, res) => {
     }
     try {
       const out = await routes[key](body, identity);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(out));
+      if (out && out.__raw !== undefined) {
+        res.writeHead(200, { 'Content-Type': out.__type, 'Content-Disposition': `attachment; filename="${out.__name}"` });
+        res.end(out.__raw);
+      } else {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(out));
+      }
     } catch (e) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: e.message }));

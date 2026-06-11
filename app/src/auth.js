@@ -42,3 +42,24 @@ export function getSession(cookieHeader) {
 export function checkSession(cookieHeader) {
   return getSession(cookieHeader) !== null;
 }
+
+// The governance tool governs itself: actions are permissioned by role,
+// not just attributed. Approving a change and attesting governance are
+// decision-rights, so they are restricted; read/analyse is open to all roles.
+const ROLE_PERMS = {
+  'Global Admin': ['fix', 'attest', 'plan'],
+  'Security Admin': ['fix', 'plan'],
+  'AI Governance Lead': ['fix', 'attest', 'plan'],
+  'Compliance Admin': ['attest', 'plan'],
+  'Agent Owner': ['attest'],
+  'Solution Architect': ['plan'],
+  'Operator': [],
+};
+
+export function canDo(role, action) {
+  return (ROLE_PERMS[role] ?? []).includes(action);
+}
+
+export function permsFor(role) {
+  return { fix: canDo(role, 'fix'), attest: canDo(role, 'attest'), plan: canDo(role, 'plan') };
+}

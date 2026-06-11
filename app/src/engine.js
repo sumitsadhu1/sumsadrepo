@@ -59,6 +59,15 @@ function rate(results) {
   return Math.round((100 * applicable.filter((r) => r.status === 'pass').length) / applicable.length);
 }
 
+// Coverage = measured / in-scope. License-gated checks are out of scope (the tenant
+// cannot measure them); not-collected checks are IN scope and reduce coverage —
+// sparse data must read as partial, never as complete.
+function coverage(results) {
+  const inScope = results.filter((r) => r.status !== 'license-gated');
+  const measured = inScope.filter((r) => r.status === 'pass' || r.status === 'fail');
+  return { measured: measured.length, inScope: inScope.length };
+}
+
 export function score(results) {
   const config = results.filter((r) => r.type === 'config' || r.type === 'hybrid');
   const attest = results.filter((r) => r.type === 'attest');
@@ -73,7 +82,9 @@ export function score(results) {
   }
   return {
     configScore: rate(config),
+    configCoverage: coverage(config),
     attestScore: rate(attest),
+    attestCoverage: coverage(attest),
     perControl,
     unlockable: results.filter((r) => r.status === 'license-gated').map((r) => r.id),
     notCollected: results.filter((r) => r.status === 'not-collected').map((r) => r.id),
@@ -81,17 +92,35 @@ export function score(results) {
 }
 
 // Stage = 1 + number of consecutive exit gates passed.
-// A gate passes when every applicable (non-gated, collected) check in it passes.
+// A gate passes only when (a) at least gateCoverageMin of its checks were actually
+// MEASURED (not-collected blocks the gate — unmeasured is not a pass), and
+// (b) no measured check fails. Each gate also reports how much of it rests on
+// self-attestation so the verdict can't silently launder asserted governance
+// into the appearance of evidence.
 export function placeStage(results) {
+  const minCov = STAGES.gateCoverageMin ?? 0.8;
   const byId = Object.fromEntries(results.map((r) => [r.id, r]));
   let stage = 1;
   const gateDetail = {};
   for (const g of ['1', '2', '3']) {
     const ids = STAGES.gates[g];
-    const applicable = ids.filter((id) => ['pass', 'fail'].includes(byId[id]?.status));
-    const failing = applicable.filter((id) => byId[id].status === 'fail');
-    gateDetail[g] = { total: ids.length, applicable: applicable.length, failing };
-    if (applicable.length > 0 && failing.length === 0 && Number(g) === stage) stage = Number(g) + 1;
+    const measured = ids.filter((id) => ['pass', 'fail'].includes(byId[id]?.status));
+    const failing = measured.filter((id) => byId[id].status === 'fail');
+    const notCollected = ids.filter((id) => byId[id]?.status === 'not-collected');
+    const attestIds = ids.filter((id) => byId[id]?.type === 'attest');
+    const cov = ids.length ? measured.length / ids.length : 0;
+    const passed = cov >= minCov && failing.length === 0;
+    gateDetail[g] = {
+      total: ids.length,
+      measured: measured.length,
+      coverage: Math.round(cov * 100),
+      coverageMin: Math.round(minCov * 100),
+      failing,
+      notCollected,
+      attestCount: attestIds.length,
+      passed,
+    };
+    if (passed && Number(g) === stage) stage = Number(g) + 1;
   }
   return { stage, gateDetail };
 }

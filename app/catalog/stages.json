@@ -1,4 +1,5 @@
 {
+  "gateCoverageMin": 0.8,
   "stages": [
     {"n": 1, "name": "Get Ready", "tagline": "Not Copilot / AI ready — build the secure foundation"},
     {"n": 2, "name": "Adopt & Extend", "tagline": "Copilot ready — drive adoption, start agents with guardrails"},

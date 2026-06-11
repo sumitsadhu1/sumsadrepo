@@ -72,19 +72,31 @@ function renderOverview() {
   const { scores, placement } = S.assessment;
   const stages = S.stages.stages.map((s) => {
     const cls = s.n < placement.stage ? 'passed' : s.n === placement.stage ? 'current' : '';
-    return `<div class="stage-chip ${cls}"><b>Stage ${s.n} — ${esc(s.name)}</b><small>${esc(s.tagline)}</small></div>`;
+    const gd = placement.gateDetail[String(s.n)];
+    const covLine = gd
+      ? `<small class="mono">${gd.measured}/${gd.total} gate checks measured${gd.attestCount ? ` · ${gd.attestCount} self-attested` : ''}</small>`
+      : '';
+    return `<div class="stage-chip ${cls}"><b>Stage ${s.n} — ${esc(s.name)}</b><small>${esc(s.tagline)}</small>${covLine}</div>`;
   }).join('');
+  const cc = scores.configCoverage, ac = scores.attestCoverage;
+  const partialCfg = cc && cc.inScope > 0 && cc.measured < cc.inScope;
   const gap = (scores.configScore ?? 0) - (scores.attestScore ?? 0);
   // why this stage: what blocks the next gate
-  const nextGate = String(placement.stage);
-  const blocking = placement.gateDetail[nextGate]?.failing ?? [];
+  const nextGate = placement.gateDetail[String(placement.stage)];
   const byId = Object.fromEntries(S.assessment.results.map((r) => [r.id, r]));
-  const whyStage = placement.stage < 4
+  const tag = (id) => byId[id]?.type === 'attest' ? ' <span class="pill attestpill">attest</span>' : '';
+  const whyStage = placement.stage < 4 && nextGate
     ? `<div class="card gap-callout"><h3>To reach Stage ${placement.stage + 1}</h3>
-       ${blocking.length
-         ? `<p class="muted">Clear these gate checks:</p>` + blocking.map((id) =>
-             `<div>• <b>${id}</b> — ${esc(byId[id]?.title ?? '')}</div>`).join('')
-         : '<p class="muted">Gate checks pass — re-run assessment or review not-collected items.</p>'}
+       <p class="muted mono">Gate coverage: ${nextGate.coverage}% measured (needs ≥${nextGate.coverageMin}%)</p>
+       ${nextGate.failing.length
+         ? `<p class="muted">Failing gate checks:</p>` + nextGate.failing.map((id) =>
+             `<div>• <b class="mono">${id}</b> — ${esc(byId[id]?.title ?? '')}${tag(id)}</div>`).join('')
+         : ''}
+       ${nextGate.notCollected.length
+         ? `<p class="muted">Not yet measured (these BLOCK the gate):</p>` + nextGate.notCollected.map((id) =>
+             `<div>• <b class="mono">${id}</b> — ${esc(byId[id]?.title ?? '')}</div>`).join('')
+         : ''}
+       ${!nextGate.failing.length && !nextGate.notCollected.length ? '<p class="muted">Gate clear — re-run the assessment.</p>' : ''}
        </div>`
     : '<div class="card"><h3>Frontier</h3><p class="muted">No exit gate — steady state of earned autonomy.</p></div>';
   // trend sparkline from history
@@ -99,17 +111,26 @@ function renderOverview() {
       <svg viewBox="0 0 ${w} ${h}" style="width:100%;max-width:460px">${line('configScore', '#0f6cbd')}${line('attestScore', '#b97e00')}</svg>
       <div class="muted"><span style="color:#0f6cbd">■</span> config &nbsp; <span style="color:#b97e00">■</span> attestation</div></div>`;
   })() : '';
-  const bars = Object.entries(scores.perControl).map(([n, c]) => `
+  const bars = Object.entries(scores.perControl).map(([n, c]) => {
+    const xw = S.stages.crosswalk?.[n];
+    return `
     <div class="bar-row">
-      <div class="bar-label">${n}. ${esc(c.name)}</div>
-      <div class="bar config"><i style="width:${c.config ?? 0}%"></i><span>${c.config == null ? 'n/a' : c.config + '%'} config</span></div>
-      <div class="bar attest"><i style="width:${c.attest ?? 0}%"></i><span>${c.attest == null ? 'n/a' : c.attest + '%'} attest</span></div>
-    </div>`).join('');
+      <div class="bar-label">${n}. ${esc(c.name)}
+        ${xw ? `<div class="muted xwline">${esc(xw.nist)} · ${esc(xw.iso)} · ${esc(xw.eu)}</div>` : ''}</div>
+      <div class="bar config"><i style="width:${c.config ?? 0}%"></i><span>${c.config == null ? 'n/a' : c.config + '%'} measured</span></div>
+      <div class="bar attest"><i style="width:${c.attest ?? 0}%"></i><span>${c.attest == null ? 'n/a' : c.attest + '%'} attested</span></div>
+    </div>`;
+  }).join('');
   el.innerHTML = `
     <div class="stageline">${stages}</div>
     <div class="cards">
-      <div class="card"><h3>Config score</h3><div class="big">${scores.configScore ?? '—'}%</div><div class="muted">objective, from the tenant scan</div></div>
-      <div class="card"><h3>Attestation completeness</h3><div class="big">${scores.attestScore ?? '—'}%</div><div class="muted">governance recorded &amp; current</div></div>
+      <div class="card"><h3>Config score <span class="pill mode">measured</span></h3>
+        <div class="big mono">${scores.configScore ?? '—'}%</div>
+        <div class="muted mono">of ${cc.measured}/${cc.inScope} checks measured</div>
+        ${partialCfg ? '<div class="warn">⚠ Partial coverage — unmeasured checks block stage gates, they are never assumed to pass</div>' : ''}</div>
+      <div class="card"><h3>Attestation completeness <span class="pill attestpill">self-attested</span></h3>
+        <div class="big mono">${scores.attestScore ?? '—'}%</div>
+        <div class="muted mono">of ${ac.measured}/${ac.inScope} governance signals recorded — asserted by owners, not independently verifiable</div></div>
       <div class="card gap-callout"><h3>The gap</h3><div class="big">${gap > 0 ? gap : 0} pts</div><div class="muted">config-ready but governance-untracked — the number most assessments miss</div></div>
       <div class="card"><h3>Unlockable (E5)</h3><div class="big">${scores.unlockable.length}</div><div class="muted">checks gated by licensing${scores.notCollected.length ? ` · ${scores.notCollected.length} not collected in this mode` : ''}</div></div>
     </div>
@@ -118,20 +139,48 @@ function renderOverview() {
 }
 
 /* ---------- Findings ---------- */
+let findingsFilter = { text: '', status: 'all' };
+
 function renderFindings() {
   const el = $('#tab-findings');
-  if (!S.assessment) { el.innerHTML = '<p class="muted">Run an assessment first.</p>'; return; }
-  const rows = S.assessment.results.map((r) => `
+  if (!S.assessment) {
+    el.innerHTML = '<div class="card"><h3>No assessment yet</h3><p class="muted">Pick a tenant mode (top right) and click <b>Run assessment</b>. Findings — with evidence — appear here.</p></div>';
+    return;
+  }
+  const f = findingsFilter;
+  const visible = S.assessment.results.filter((r) => {
+    if (f.status !== 'all' && r.status !== f.status) return false;
+    if (f.text && !(r.id + ' ' + r.title + ' ' + r.controlName + ' ' + r.persona).toLowerCase().includes(f.text.toLowerCase())) return false;
+    return true;
+  });
+  // failures first, then not-collected, then license-gated, then passes
+  const order = { fail: 0, 'not-collected': 1, 'license-gated': 2, pass: 3 };
+  visible.sort((a, b) => order[a.status] - order[b.status] || a.stage - b.stage || a.id.localeCompare(b.id));
+  const rows = visible.map((r) => `
     <tr>
-      <td><b>${r.id}</b><br><span class="muted">${esc(r.controlName)} · S${r.stage} · ${r.tier === 'O' ? 'E5' : 'E3'}</span></td>
+      <td><b class="mono">${r.id}</b><br><span class="muted">${esc(r.controlName)} · S${r.stage} · ${r.tier === 'O' ? 'E5' : 'E3'}</span></td>
       <td>${esc(r.title)}${r.note ? `<br><span class="muted">${esc(r.note)}</span>` : ''}
         ${r.evidence?.length ? `<ul class="evidence">${r.evidence.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}</td>
-      <td><span class="pill ${r.status}">${r.status}</span><br><span class="pill mode">${r.type}</span></td>
-      <td class="row-actions">${r.status === 'fail' && r.canDemoFix && S.settings.mode !== 'live'
+      <td><span class="pill ${r.status}">${r.status}</span><br><span class="pill ${r.type === 'attest' ? 'attestpill' : 'mode'}">${r.type === 'attest' ? 'self-attested' : r.type}</span></td>
+      <td class="row-actions">${r.status === 'fail' && r.canDemoFix && S.settings.mode !== 'live' && S.perms?.fix
         ? `<button class="small primary" onclick="openFix('${r.id}')">Fix…</button>` : ''}
         ${r.portal ? `<a href="${r.portal}" target="_blank"><button class="small">Portal</button></a>` : ''}</td>
     </tr>`).join('');
-  el.innerHTML = `<table><thead><tr><th>Check</th><th>Finding</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  el.innerHTML = `
+    <div class="filterbar">
+      <input id="f-text" placeholder="Filter by id, title, control, persona…" value="${esc(f.text)}">
+      <select id="f-status">
+        ${['all', 'fail', 'pass', 'not-collected', 'license-gated'].map((s) =>
+          `<option value="${s}" ${f.status === s ? 'selected' : ''}>${s === 'all' ? 'All statuses' : s}</option>`).join('')}
+      </select>
+      <span class="muted mono">${visible.length} of ${S.assessment.results.length} checks</span>
+      <span style="flex:1"></span>
+      <button class="small" onclick="window.open('/api/export/findings.csv')">CSV</button>
+      <button class="small" onclick="window.open('/api/export/assessment.json')">JSON</button>
+    </div>
+    <table><thead><tr><th>Check</th><th>Finding</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  $('#f-text').addEventListener('input', (e) => { findingsFilter.text = e.target.value; renderFindings(); $('#f-text').focus(); $('#f-text').setSelectionRange(99, 99); });
+  $('#f-status').addEventListener('change', (e) => { findingsFilter.status = e.target.value; renderFindings(); });
 }
 
 /* ---------- Configure pipeline (demo): dry-run → approve → apply → verify ---------- */
@@ -216,7 +265,9 @@ function renderRegister() {
         ${a.lastAttestedBy ? `<br><span class="muted">by ${esc(a.lastAttestedBy)}</span>` : ''}
         ${d != null && !stale ? `<br><span class="muted">expires in ${90 - d}d</span>` : ''}
         ${a.attestNote ? `<br><span class="muted">"${esc(a.attestNote)}"</span>` : ''}</td>
-      <td><button class="small" onclick="attest('${a.id}', '${esc(a.name)}')">Attest</button></td>
+      <td>${S.perms?.attest
+        ? `<button class="small" onclick="attest('${a.id}', '${esc(a.name)}')">Attest</button>`
+        : `<span class="muted" title="Your role cannot attest — attestation is a decision-right">no attest right</span>`}</td>
     </tr>`;
   }).join('');
   el.innerHTML = `
@@ -242,7 +293,8 @@ window.addAgent = async function (ev) {
   const f = Object.fromEntries(new FormData(ev.target).entries());
   await api('/api/register/agent', f);
   ev.target.reset();
-  toast('Agent saved — re-run the assessment to update ATTEST checks');
+  await api('/api/assess', {});
+  toast('Agent saved — assessment re-run automatically');
   await refresh();
   return false;
 };
@@ -261,8 +313,11 @@ window.attest = function (id, name) {
 window.doAttest = async function (id) {
   const note = $('#attest-note').value.trim();
   closeModal();
-  await api('/api/register/attest', { id, note });
-  toast('Attested — recorded with your identity and timestamp');
+  try {
+    await api('/api/register/attest', { id, note });
+    await api('/api/assess', {});
+    toast('Attested — recorded with your identity; assessment re-run');
+  } catch (e) { toast(e.message); }
   await refresh();
 };
 
@@ -295,7 +350,8 @@ window.saveAnswers = async function (ev) {
     out[q.id] = q.type === 'bool' ? v === 'true' : (isNaN(Number(v)) ? v : Number(v));
   }
   await api('/api/answers', out);
-  toast('Saved — re-run the assessment to apply');
+  await api('/api/assess', {});
+  toast('Saved — assessment re-run automatically');
   await refresh();
   return false;
 };
@@ -381,6 +437,7 @@ $('#mode-select').addEventListener('change', async (e) => {
 });
 
 $('#btn-report').addEventListener('click', () => window.open('/api/report', '_blank'));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
 $('#btn-assess').addEventListener('click', async () => {
   $('#btn-assess').disabled = true;
