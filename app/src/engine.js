@@ -26,18 +26,19 @@ const OPS = {
 // Status per check: pass | fail | license-gated | not-collected
 export function evaluate(snapshot) {
   const e5 = !!getPath(snapshot, 'tenant.licenses.e5');
+  const evidenceFor = (id) => snapshot.evidence?.[id] ?? null;
   return CHECKS.map((c) => {
     if (c.tier === 'O' && !e5) {
-      return { ...meta(c), status: 'license-gated', actual: null,
+      return { ...meta(c), status: 'license-gated', actual: null, evidence: evidenceFor(c.id),
         note: 'Requires an E5/A5/G5 (optimized) license — listed as unlockable, excluded from scores.' };
     }
     const actual = getPath(snapshot, c.measure.path);
     if (actual === undefined || actual === null) {
-      return { ...meta(c), status: 'not-collected', actual: null,
+      return { ...meta(c), status: 'not-collected', actual: null, evidence: evidenceFor(c.id),
         note: 'Not collected in this mode — excluded from scores.' };
     }
     const pass = OPS[c.measure.op](actual, c.measure.value);
-    return { ...meta(c), status: pass ? 'pass' : 'fail', actual };
+    return { ...meta(c), status: pass ? 'pass' : 'fail', actual, evidence: evidenceFor(c.id) };
   });
 }
 

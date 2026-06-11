@@ -7,9 +7,31 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 async function api(path, body) {
   const res = await fetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : undefined);
   const j = await res.json();
+  if (res.status === 401 && path !== '/api/login') { showLogin(); throw new Error('Sign in required'); }
   if (!res.ok) throw new Error(j.error || 'Request failed');
   return j;
 }
+
+function showLogin() {
+  $('#modal-card').innerHTML = `
+    <h2>Sign in</h2>
+    <p class="muted">Enter the access key printed in the server console when it first started.
+    (Lost it? Delete <code>app/data/auth.json</code> and restart the server.)</p>
+    <input id="login-key" type="password" placeholder="Access key" style="width:100%" autofocus>
+    <div class="modal-actions"><button class="primary" onclick="doLogin()">Sign in</button></div>
+    <div id="login-err" class="muted"></div>`;
+  $('#modal').classList.remove('hidden');
+}
+
+window.doLogin = async function () {
+  try {
+    await api('/api/login', { key: $('#login-key').value.trim() });
+    closeModal();
+    await refresh();
+  } catch (e) {
+    $('#login-err').textContent = e.message;
+  }
+};
 
 function toast(msg) {
   const t = $('#toast');
@@ -71,7 +93,8 @@ function renderFindings() {
   const rows = S.assessment.results.map((r) => `
     <tr>
       <td><b>${r.id}</b><br><span class="muted">${esc(r.controlName)} · S${r.stage} · ${r.tier === 'O' ? 'E5' : 'E3'}</span></td>
-      <td>${esc(r.title)}${r.note ? `<br><span class="muted">${esc(r.note)}</span>` : ''}</td>
+      <td>${esc(r.title)}${r.note ? `<br><span class="muted">${esc(r.note)}</span>` : ''}
+        ${r.evidence?.length ? `<ul class="evidence">${r.evidence.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}</td>
       <td><span class="pill ${r.status}">${r.status}</span><br><span class="pill mode">${r.type}</span></td>
       <td class="row-actions">${r.status === 'fail' && r.canDemoFix && S.settings.mode !== 'live'
         ? `<button class="small primary" onclick="openFix('${r.id}')">Fix…</button>` : ''}
@@ -312,4 +335,4 @@ $('#btn-assess').addEventListener('click', async () => {
   finally { $('#btn-assess').disabled = false; }
 });
 
-refresh();
+refresh().catch(() => {}); // 401 → login overlay is already shown

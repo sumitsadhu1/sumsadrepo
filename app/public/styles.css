@@ -73,3 +73,6 @@ tr:last-child td { border-bottom: none; }
 form.inline-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin-bottom: 12px; }
 .note { background: #fffbe8; border: 1px solid #f0e2a0; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 13px; }
 .quote { font-style: italic; color: var(--muted); margin: 4px 0 16px; }
+ul.evidence { margin: 6px 0 0; padding-left: 18px; font-size: 12px; color: #374151; }
+ul.evidence li { margin: 1px 0; }
+code { background: #f0f2f4; padding: 1px 5px; border-radius: 4px; font-size: 12px; }

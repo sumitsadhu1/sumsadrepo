@@ -12,6 +12,14 @@ npm start          # or: node server.js
 # open http://localhost:3000
 ```
 
+On first start the console prints a one-time **access key** — enter it in the browser to sign in (session cookie, 12h). Lost it? Delete `app/data/auth.json` and restart.
+
+**Security posture (v0.2):**
+- UI requires the access key; all API routes return 401 without a session.
+- Binds to `127.0.0.1` only (set `HOST=0.0.0.0` to override — a warning is printed).
+- Graph access tokens live in memory only; the refresh token is persisted **encrypted** (AES-256-GCM, key file `data/.secret` with 0600 perms) and rotated on refresh.
+- Live mode remains read-only; Graph calls retry on throttling and follow paging.
+
 Run the engine tests:
 
 ```bash
@@ -32,9 +40,9 @@ npm test
 ## Live mode (your real tenant, read-only)
 
 1. In [Entra admin center](https://entra.microsoft.com) → App registrations → **New registration**: single tenant, no redirect URI needed; under **Authentication** enable **Allow public client flows**.
-2. API permissions → Microsoft Graph → **Delegated** → add `Organization.Read.All` and `Policy.Read.All` → grant admin consent.
+2. API permissions → Microsoft Graph → **Delegated** → add `Organization.Read.All`, `Policy.Read.All`, `Application.Read.All`, `InformationProtectionPolicy.Read` → grant admin consent.
 3. In the app: **Settings → Live tenant** → paste Tenant ID + App (client) ID → **Sign in with device code** → enter the code at microsoft.com/devicelogin.
-4. The collector pulls licensing (Copilot seats, E3/E5/SAM SKUs) and Conditional Access posture, then **Run assessment**. Checks the consented scopes can't prove report honestly as **not collected** — live mode never writes anything.
+4. **Run assessment.** Live collectors currently cover: licensing (Copilot seats, E3/E5/SAM — with per-SKU evidence), Conditional Access baseline + risk policies (with policy names as evidence), app/agent identities (ownerless identities and long-lived secrets, named), and sensitivity labels (best effort). Checks the consented scopes can't prove report honestly as **not collected** — live mode never writes anything.
 
 ## What's real vs. demo in this MVP
 

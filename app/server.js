@@ -12,9 +12,11 @@ import {
   getSettings, saveSettings, buildSnapshot, resetDemo,
   fixPreview, fixApply, deviceCodeStart, deviceCodePoll, liveCollect,
 } from './src/collectors.js';
+import { ensureAccessKey, verifyKey, createSession, checkSession } from './src/auth.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '127.0.0.1'; // localhost-only unless explicitly overridden
 const QUESTIONS = loadCatalog('questionnaire');
 
 // Answers are scoped per tenant mode; demo tenants may carry seeded answers in their fixture.
@@ -108,6 +110,30 @@ http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const key = req.method + ' ' + url.pathname;
 
+  if (key === 'POST /api/login') {
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    let body = {};
+    try { body = JSON.parse(Buffer.concat(chunks).toString() || '{}'); } catch {}
+    if (verifyKey(body.key)) {
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Set-Cookie': `aga_session=${createSession()}; HttpOnly; SameSite=Strict; Path=/`,
+      });
+      res.end('{"ok":true}');
+    } else {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end('{"error":"Invalid access key"}');
+    }
+    return;
+  }
+
+  if (url.pathname.startsWith('/api/') && !checkSession(req.headers.cookie)) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end('{"error":"Sign in with the access key (printed when the server first started)"}');
+    return;
+  }
+
   if (routes[key]) {
     let body = {};
     if (req.method === 'POST') {
@@ -137,6 +163,17 @@ http.createServer(async (req, res) => {
   }
   res.writeHead(404);
   res.end('Not found');
-}).listen(PORT, () => {
+}).listen(PORT, HOST, () => {
   console.log(`Agent Governance Assessment running → http://localhost:${PORT}`);
+  const freshKey = ensureAccessKey();
+  if (freshKey) {
+    console.log('');
+    console.log('  ┌──────────────────────────────────────────────┐');
+    console.log(`  │  ACCESS KEY (shown once):  ${freshKey}      │`);
+    console.log('  └──────────────────────────────────────────────┘');
+    console.log('  Enter it in the browser to sign in. Lost it? Delete app/data/auth.json and restart.');
+  }
+  if (HOST !== '127.0.0.1' && HOST !== 'localhost') {
+    console.warn(`  WARNING: bound to ${HOST} — the UI is reachable from the network. Use only behind trusted access.`);
+  }
 });
