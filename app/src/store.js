@@ -4,7 +4,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const DATA = path.join(ROOT, 'data');
+// AGA_DATA_DIR lets tests (and parallel instances) use an isolated store —
+// the suite must never write through the live app's data, where it could
+// clobber real state such as the encrypted sign-in token.
+const DATA = process.env.AGA_DATA_DIR ? path.resolve(process.env.AGA_DATA_DIR) : path.join(ROOT, 'data');
 
 export function dataDir() {
   if (!fs.existsSync(DATA)) fs.mkdirSync(DATA, { recursive: true });

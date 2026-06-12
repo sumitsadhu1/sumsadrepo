@@ -61,6 +61,19 @@ test('sku transform: copilot seats summed, tiers detected', () => {
   assert.ok(out.evidence['AGA-101'][0].includes('80 assigned'));
 });
 
+test('LIVE FINDING: blocked/failed collection can never fabricate a fail or a zero', () => {
+  // Discovered live: with graph.microsoft.com unreachable, the scan reported
+  // "CA baseline: fail" and "0 Copilot seats". All transforms must return null
+  // on failed collection so the engine reports not-collected instead.
+  assert.equal(transformCaPolicies(null), null);
+  assert.equal(transformSkus(null), null);
+  assert.equal(transformApplications(null), null);
+  // and a snapshot missing those sections evaluates to not-collected, not fail
+  const r = evaluate({ tenant: undefined, identity: undefined });
+  assert.equal(r.find((x) => x.id === 'AGA-301').status, 'not-collected');
+  assert.equal(r.find((x) => x.id === 'AGA-101').status, 'not-collected');
+});
+
 test('directory-roles transform: AI Administrator delegation measured, GA count in evidence', () => {
   const out = transformDirectoryRoles([
     { displayName: 'AI Administrator', members: [{ id: 'u1' }, { id: 'u2' }] },

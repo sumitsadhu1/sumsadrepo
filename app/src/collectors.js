@@ -202,7 +202,8 @@ async function graphGetOne(token, url) {
 // ---- pure transforms (unit-tested) ----
 
 export function transformCaPolicies(policies) {
-  const pols = (policies ?? []).filter((p) => p.state === 'enabled');
+  if (!policies) return null; // collection failed → not collected, never "no policies = fail"
+  const pols = policies.filter((p) => p.state === 'enabled');
   const mfaAll = pols.filter((p) =>
     p.grantControls?.builtInControls?.includes('mfa') &&
     p.conditions?.users?.includeUsers?.includes('All'));
@@ -231,7 +232,8 @@ export function transformCaPolicies(policies) {
 const LONG_LIVED_DAYS = 730;
 
 export function transformApplications(apps) {
-  const list = apps ?? [];
+  if (!apps) return null;
+  const list = apps;
   const orphaned = list.filter((a) => (a.owners ?? []).length === 0);
   const horizon = Date.now() + LONG_LIVED_DAYS * 86400000;
   const longLived = list.filter((a) =>
@@ -252,7 +254,8 @@ export function transformApplications(apps) {
 }
 
 export function transformSkus(skuList) {
-  const skus = skuList ?? [];
+  if (!skuList) return null;
+  const skus = skuList;
   const has = (frag) => skus.some((s) => (s.skuPartNumber || '').toUpperCase().includes(frag));
   const copilotSkus = skus.filter((s) => (s.skuPartNumber || '').toUpperCase().includes('COPILOT'));
   const copilotSeats = copilotSkus.reduce((sum, s) => sum + (s.prepaidUnits?.enabled ?? 0), 0);
@@ -353,6 +356,9 @@ export async function liveCollect() {
     graphGetOne(t, '/policies/authorizationPolicy'),
   ]);
 
+  // Every transform returns null when its collection failed — a failed or
+  // blocked Graph call must surface as "not collected", never as a fabricated
+  // fail ("no policies found") or a fabricated zero ("0 Copilot seats").
   const lic = transformSkus(skus);
   const ca = transformCaPolicies(caPolicies);
   const appx = transformApplications(apps);
@@ -361,29 +367,32 @@ export async function liveCollect() {
   const spox = transformSpoSettings(spoSettings);
   const authx = transformAuthorizationPolicy(authPolicy);
 
+  const identity = {
+    ...(ca ? { caBaseline: ca.caBaseline, riskBasedCAandPIM: ca.riskBasedCAandPIM } : {}),
+    ...(dirx ? { aiAdminDelegated: dirx.aiAdminDelegated } : {}),
+  };
   const purview = {
     ...(labels !== null ? { sensitivityLabelsPublished: (labels ?? []).length > 0 } : {}),
     ...(audx ? { auditCopilotInteractions: audx.auditCopilotInteractions } : {}),
   };
+  const collectors = { organization: !!org, licensing: !!lic, conditionalAccess: !!ca, applications: !!appx, directoryRoles: !!dirx, auditSearch: !!audx, sensitivityLabels: labels !== null, sharepointSettings: !!spox, authorizationPolicy: !!authx };
+  const failed = Object.entries(collectors).filter(([, ok]) => !ok).map(([k]) => k);
 
   const snapshot = {
     tenantName: (org?.[0]?.displayName || 'Live tenant') + ' (live scan)',
     scannedAt: new Date().toISOString(),
-    tenant: { licenses: lic.licenses },
-    identity: {
-      caBaseline: ca.caBaseline,
-      riskBasedCAandPIM: ca.riskBasedCAandPIM,
-      ...(dirx ? { aiAdminDelegated: dirx.aiAdminDelegated } : {}),
-    },
-    agents: apps ? {
+    collectors,
+    tenant: lic ? { licenses: lic.licenses } : undefined,
+    identity: Object.keys(identity).length ? identity : undefined,
+    agents: appx ? {
       orphanedAgentIdentities: appx.orphanedAgentIdentities,
       credentialRotation: appx.credentialRotation,
     } : undefined,
     purview: Object.keys(purview).length ? purview : undefined,
     evidence: {
-      ...lic.evidence,
-      ...ca.evidence,
-      ...(apps ? appx.evidence : {}),
+      ...(lic?.evidence ?? {}),
+      ...(ca?.evidence ?? {}),
+      ...(appx?.evidence ?? {}),
       ...(labels?.length ? { 'AGA-403': labels.slice(0, 10).map((l) => `Label: "${l.name ?? l.displayName}"`) } : {}),
       ...(dirx?.evidence ?? {}),
       ...(audx?.evidence ?? {}),
@@ -393,5 +402,8 @@ export async function liveCollect() {
     // sharepoint DAG/RCD/lifecycle, teams protection, finops + remaining purview:
     // no Graph surface exists → honestly "not collected" (context evidence where possible).
   };
+  if (failed.length) {
+    console.warn('liveCollect: collectors returned nothing (network/permission):', failed.join(', '));
+  }
   return save('live-snapshot', snapshot);
 }
