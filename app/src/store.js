@@ -17,7 +17,12 @@ export function dataDir() {
 export function load(name, fallback) {
   const f = path.join(dataDir(), name + '.json');
   if (!fs.existsSync(f)) return structuredClone(fallback);
-  try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return structuredClone(fallback); }
+  try {
+    const v = JSON.parse(fs.readFileSync(f, 'utf8'));
+    // A stored null means "cleared" (e.g. workspace reset) — callers must get
+    // their fallback, never a null that breaks .push()/spread (§10.3).
+    return v === null ? structuredClone(fallback) : v;
+  } catch { return structuredClone(fallback); }
 }
 
 export function save(name, value) {

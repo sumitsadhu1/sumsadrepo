@@ -72,6 +72,16 @@ test('§8.1 B5: not-collected gate blockers appear in the plan as measure tasks 
   save('plan-' + M, null);
 });
 
+test('§10.3: a reset workspace never serves null stores — assess and render must survive a reset', () => {
+  resetWorkspace('live'); // writes cleared markers to every live-* store
+  const h = load('history-live', []);
+  assert.ok(Array.isArray(h), 'history must come back as the fallback array, not null');
+  h.push({ stage: 1 }); // the exact op that 400d POST /api/assess in §10.3
+  assert.deepEqual(load('audit-live', []), [], 'audit must be spreadable after reset');
+  assert.equal(load('last-assessment-live', null), null, 'null fallback callers still see null');
+  save('live-snapshot', null);
+});
+
 test('§7.1/§8.1 B1+B2: audit, plan, history, assessment are per-mode; reset clears only that mode', () => {
   // a demo fix writes to that tenant's audit only
   save('audit-contoso', []);

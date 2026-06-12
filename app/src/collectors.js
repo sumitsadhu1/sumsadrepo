@@ -151,14 +151,25 @@ async function ensureToken() {
   const blob = load('live-token-enc', null);
   const creds = blob && decrypt(blob);
   if (!creds) throw new Error('Not signed in — run the device-code flow first');
-  const r = await fetch(`https://login.microsoftonline.com/${creds.tenantId}/oauth2/v2.0/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token', client_id: creds.clientId,
-      refresh_token: creds.refresh_token, scope: SCOPES,
-    }),
-  });
+  // One transparent retry: the first refresh after a cold start can hit a
+  // transient "fetch failed" before the connection pool warms up (§10.4).
+  let r;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      r = await fetch(`https://login.microsoftonline.com/${creds.tenantId}/oauth2/v2.0/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token', client_id: creds.clientId,
+          refresh_token: creds.refresh_token, scope: SCOPES,
+        }),
+      });
+      break;
+    } catch (e) {
+      if (attempt >= 1) throw e;
+      await new Promise((res) => setTimeout(res, 1500));
+    }
+  }
   const j = await r.json();
   if (j.error) throw new Error('Session expired — sign in again (' + j.error + ')');
   storeTokens(creds, j);

@@ -47,6 +47,7 @@ function toast(msg) {
 
 async function refresh() {
   S = await api('/api/state');
+  S.audit = S.audit ?? []; S.history = S.history ?? []; // belt-and-braces vs null stores (§10.3)
   $('#mode-select').value = S.settings.mode;
   $('#tenant-name').textContent = S.assessment
     ? `${S.assessment.tenantName} — scanned ${new Date(S.assessment.at).toLocaleString()}`
