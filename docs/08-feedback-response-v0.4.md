@@ -94,3 +94,14 @@ Triage: everything in §7.1/§7.2/§8.1/§8.2 that touches data integrity or the
 | U1 contrast, U2 microcopy, U3 register delete, U4 reset visibility | Bar labels on white chips (WCAG); disabled Attest button with role tooltip; register entries deletable behind the fix permission with confirm; workspace card is mode-aware. |
 
 Tests: 32/32 — new `test/isolation.test.js` locks in per-mode audit/plan/history isolation, reset semantics (live token survives), answer stamping/expiry/permission, AGA-907 wiring, and measure-task lifecycle.
+
+---
+
+# Scope decision (2026-06-12, product owner): one customer at a time, self-serve
+
+The tool's scope is a **single customer running it against their own tenant** — download, run locally, connect read-only, work the journey. Consequences for the open backlog:
+
+- **§3.4 multi-customer / portfolio view — CLOSED (out of scope).** One instance per customer/engagement; all state local to that instance.
+- **§9.4 concurrent-use caveat (global tenant mode) — by design.** A single customer workspace assumes one operating team on one instance; no per-session tenant switching is needed.
+- **Self-serve onboarding shipped (v0.7.3):** first-run Overview presents the "connect your tenant" path as primary (with the sample tenants as the no-setup alternative); the full Entra one-time setup steps are inline in Settings; the mode selector reads "Your tenant (live, read-only)" first; README opens with a customer quickstart.
+- The reviewer's "best use today: facilitated instrument" caution still applies to *interpretation* — but the §2/§10 honesty fixes (coverage floors, anti-fabrication, provenance) are what make unattended self-serve verdicts safe: the tool can understate, never overstate.

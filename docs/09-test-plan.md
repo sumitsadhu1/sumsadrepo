@@ -190,7 +190,7 @@ Entra prerequisites: public-client app registration; delegated `Organization.Rea
 | TC-14.1 | Stale assessment shape | Place an old-shape `last-assessment-<mode>.json` (no `notCollected` in gateDetail) → load Overview | Renders defensively, no crash | §8.1 B3 |
 | TC-14.2 | Malformed POST body | `POST /api/assess` with invalid JSON | Treated as `{}` or 400 — never a crash/500 | — |
 | TC-14.3 | Unknown route / path traversal | `GET /api/nope`; `GET /../../etc/passwd` | 404 both; static serving confined to `public/` | — |
-| TC-14.4 | Concurrent mode caveat | Two browsers, different roles; one switches tenant | Known limitation (global mode) — verify no data corruption, only shared view; documented for P2 | §9.4 |
+| TC-14.4 | Shared workspace (by design) | Two browsers, different roles; one switches tenant | Single-customer scope: both sessions share one workspace/tenant mode by design — verify no data corruption; both views stay consistent after refresh | §9.4 + scope decision |
 
 ## 15. Accessibility & visual
 
@@ -224,4 +224,5 @@ Run each as a continuous session; they exercise the integration seams the unit c
 
 ## Appendix B — known-open items (do NOT file as new bugs)
 
-- Copilot Chat vs licensed M365 Copilot modelling; Entra Agent ID / Agent 365 wiring; multi-customer portfolio; concurrent multi-user (global mode); branded PDF/PPT export; "audit instrument" visual restyle; full ARIA/responsive pass. All tracked in `docs/08-feedback-response-v0.4.md` dispositions.
+- Copilot Chat vs licensed M365 Copilot modelling; Entra Agent ID / Agent 365 wiring; branded PDF/PPT export; "audit instrument" visual restyle; full ARIA/responsive pass. All tracked in `docs/08-feedback-response-v0.4.md` dispositions.
+- **Out of scope by product decision (do not test for):** multi-customer portfolio views and per-session tenant switching — the tool is single-customer, one instance per engagement.

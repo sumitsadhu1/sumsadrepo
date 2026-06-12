@@ -64,10 +64,23 @@ function renderAll() {
 function renderOverview() {
   const el = $('#tab-overview');
   if (!S.assessment) {
-    el.innerHTML = `<div class="card"><h3>Welcome</h3>
-      <p class="quote">"Who has the right to approve, change, promote, fund, or retire an agent?"</p>
-      <p>Pick a tenant mode (two demo tenants, or your live tenant) and click <b>Run assessment</b>.
-      Then answer the <b>Questionnaire</b> — it records what no tenant API can see — and generate your <b>Plan</b>.</p></div>`;
+    el.innerHTML = `
+      <div class="card"><h3>Welcome</h3>
+        <p class="quote">"Who has the right to approve, change, promote, fund, or retire an agent?"</p>
+        <p>This tool assesses <b>your Microsoft 365 tenant's</b> AI/agent governance — read-only, evidence-first, one customer at a time.</p></div>
+      <div class="cards" style="grid-template-columns:1fr 1fr">
+        <div class="card gap-callout"><h3>Assess your tenant (the real thing)</h3>
+          <ol style="margin:6px 0 10px;padding-left:18px">
+            <li>One-time setup: register a public-client app in Entra and grant the read-only scopes (guided steps in <b>Settings</b>)</li>
+            <li>Sign in with a device code — credentials never touch this tool</li>
+            <li><b>Run assessment</b> → honest stage placement with evidence and coverage</li>
+            <li>Widen coverage with the <b>evidence pack</b>; record governance in <b>Questionnaire</b> + <b>Register</b></li>
+          </ol>
+          <button class="primary" onclick="goTab('settings')">Connect your tenant</button></div>
+        <div class="card"><h3>Or explore with sample data first</h3>
+          <p class="muted">Two sample tenants show the full journey without any setup: <b>Contoso</b> (early, everything to do) and <b>Fabrikam</b> (governing agents, close to frontier). The Configure pipeline (dry-run → approve → apply → audit) can be exercised safely here — your live tenant is never written to.</p>
+          <button onclick="$('#mode-select').value='contoso';$('#mode-select').dispatchEvent(new Event('change'))">Try Contoso</button></div>
+      </div>`;
     return;
   }
   const { scores, placement } = S.assessment;
@@ -442,7 +455,15 @@ function renderSettings() {
       </div>
       <div class="card">
         <h3>Live tenant (read-only)</h3>
-        <p class="muted">Create an Entra app registration (public client), grant the delegated read-only scopes listed in the README, then sign in with a device code. Live mode never writes — configuration stays demo-only in this MVP.</p>
+        <details style="margin-bottom:8px"><summary class="muted" style="cursor:pointer">One-time Entra setup (read-only) — click for steps</summary>
+          <ol class="muted" style="padding-left:18px;margin:8px 0">
+            <li><a href="https://entra.microsoft.com" target="_blank">Entra admin center</a> → App registrations → <b>New registration</b> (single tenant, no redirect URI)</li>
+            <li>Authentication → enable <b>Allow public client flows</b></li>
+            <li>API permissions → Microsoft Graph → <b>Delegated</b> → add:<br>
+              <code>Organization.Read.All</code> <code>Policy.Read.All</code> <code>Application.Read.All</code> <code>Directory.Read.All</code> <code>AuditLogsQuery.Read.All</code> <code>SharePointTenantSettings.Read.All</code> <code>InformationProtectionPolicy.Read</code></li>
+            <li><b>Grant admin consent</b>, then paste the Tenant ID and App (client) ID below</li>
+          </ol></details>
+        <p class="muted">Sign-in uses a device code — your credentials are entered at microsoft.com, never here. Live mode is read-only; configuration stays demo-only in this MVP.</p>
         <input id="live-tenant" placeholder="Tenant ID" value="${esc(live.tenantId || '')}" style="width:100%;margin-bottom:6px">
         <input id="live-client" placeholder="App (client) ID" value="${esc(live.clientId || '')}" style="width:100%;margin-bottom:6px">
         <button class="primary" onclick="liveStart()">Sign in with device code</button>
@@ -523,6 +544,8 @@ window.liveStart = async function () {
     }, 5000);
   } catch (e) { $('#live-status').textContent = 'Error: ' + e.message; }
 };
+
+window.goTab = (t) => document.querySelector(`[data-tab=${t}]`)?.click();
 
 /* ---------- wiring ---------- */
 document.querySelectorAll('#tabs button').forEach((b) => b.addEventListener('click', () => {

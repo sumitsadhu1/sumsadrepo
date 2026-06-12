@@ -2,7 +2,17 @@
 
 A working end-to-end slice of the app designed in [`../docs/04-app-design.md`](../docs/04-app-design.md) and [`../docs/05-build-plan.md`](../docs/05-build-plan.md): assessment, scoring, stage placement, plan generation with auto-verification, the Agent Governance Register with attestations, and the Configure pipeline (dry-run → approve → apply → verify → audit) in demo form.
 
+**Scope: one customer at a time.** The intended use is self-serve — a customer downloads the tool, runs it next to their own M365 tenant, connects read-only, and works the journey (assess → plan → evidence → re-assess). There is no multi-customer portfolio mode by design; a consultant runs one instance per engagement. All state stays local in `app/data/`.
+
 **Zero runtime dependencies.** Node.js 18+ is the only requirement — no `npm install`.
+
+## Customer quickstart (your tenant, ~10 minutes)
+
+1. Download: `git clone -b claude/determined-allen-52zkct https://github.com/sumitsadhu1/sumsadrepo.git` (or grab the ZIP from GitHub) → `cd sumsadrepo/app` → `node server.js` → open http://localhost:3000 and sign in with the printed access key.
+2. **Connect your tenant** (Overview button → Settings): one-time Entra app registration (public client + the read-only delegated scopes — guided steps are inline in Settings), then device-code sign-in. Credentials are entered at microsoft.com, never in this tool; access is read-only.
+3. **Run assessment** — you get an honest stage placement: what was measured (with evidence), what wasn't (and that it blocks gates), and what to do next.
+4. Widen coverage: run `scripts/collect-evidence.ps1` as your SharePoint/Compliance admin and import the pack; answer the **Questionnaire** (your answers are attributed attestations); fill the **Register** with your agents and owners.
+5. **Generate the plan**, work it, re-assess — tasks auto-close as evidence proves them. Export the report for your leadership.
 
 ## Run it
 
