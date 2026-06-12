@@ -46,6 +46,8 @@ export function attestAgent(mode, id, by, note) {
     a.lastAttested = new Date().toISOString();
     a.lastAttestedBy = by || 'unknown';
     if (note) a.attestNote = note;
+    // Append-only history (§14.2): re-attestations are a record, not an overwrite.
+    a.attestLog = [...(a.attestLog ?? []), { at: a.lastAttested, by: a.lastAttestedBy, note: note || '' }].slice(-20);
   }
   return saveRegister(mode, reg);
 }

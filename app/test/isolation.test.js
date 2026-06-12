@@ -4,6 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { saveAnswers, governanceFromAnswers, getAnswers } from '../src/answers.js';
+import { canDo, permsFor } from '../src/auth.js';
 import { generatePlan, verifyPlan, getPlan } from '../src/plan.js';
 import { evaluate } from '../src/engine.js';
 import { fixApply, resetWorkspace } from '../src/collectors.js';
@@ -45,6 +46,31 @@ test('§7.2.4: questionnaire answers are stamped, permission-gated, and expire',
   assert.match(g2.evidence['AGA-601'][0], /EXPIRED self-attestation/);
 
   save('answers-' + M, null);
+});
+
+test('§14.2: conflicting attestations are logged and surfaced as CONTESTED, never silently overwritten', () => {
+  const M = 'test-contest';
+  save('answers-' + M, {});
+  saveAnswers(M, { killSwitchTested: true }, { killSwitchTested: 'Drill OPS-1142' }, 'Marcus (Compliance Admin)', true);
+  saveAnswers(M, { killSwitchTested: false }, {}, 'Owen (Agent Owner)', true);
+  const a = getAnswers(M).killSwitchTested;
+  assert.equal(a.v, false, 'latest is authoritative');
+  assert.equal(a.log.length, 2, 'both attestations on record');
+  assert.equal(a.log[0].by, 'Marcus (Compliance Admin)');
+  const { governance, evidence } = governanceFromAnswers(M);
+  assert.equal(governance.killSwitchTested, false);
+  assert.match(evidence['AGA-601'][0], /CONTESTED: changed Yes→No by Owen \(Agent Owner\)/);
+  assert.match(evidence['AGA-601'][0], /previously Yes by Marcus/);
+  save('answers-' + M, null);
+});
+
+test('§13.2 P1-b: Compliance Admin can import evidence packs; sign-out perms intact', () => {
+  assert.ok(canDo('Compliance Admin', 'evidence'), 'the role told to collect evidence can load it');
+  assert.ok(canDo('Security Admin', 'evidence'));
+  assert.ok(!canDo('Agent Owner', 'evidence'));
+  assert.ok(!canDo('Operator', 'evidence'));
+  assert.equal(permsFor('Compliance Admin').evidence, true);
+  assert.equal(permsFor('Compliance Admin').fix, false, 'evidence right must not leak the fix right');
 });
 
 test('§7.2.1: AGA-907 consumes governance.aiPolicy — the orphan is wired', () => {

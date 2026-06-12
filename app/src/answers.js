@@ -48,9 +48,23 @@ export function saveAnswers(mode, incoming, notes, identity, canAttest) {
       e.status = 403;
       throw e;
     }
-    out[q.id] = { v: val, by: identity, at: new Date().toISOString(), note };
+    // Append-only log (§14.2): conflicting attestations must never be silently
+    // overwritten — the latest is authoritative, the history is the record.
+    const entry = { v: val, by: identity, at: new Date().toISOString(), note };
+    const log = [...(prev?.log ?? (prev ? [{ v: prev.v, by: prev.by, at: prev.at, note: prev.note }] : [])), entry].slice(-20);
+    out[q.id] = { ...entry, log };
   }
   return save('answers-' + mode, out);
+}
+
+// A control is contested when the two most recent attestations disagree on the
+// value — exactly the signal a governance forum needs surfaced, not hidden.
+export function contestedInfo(a) {
+  const log = a?.log;
+  if (!log || log.length < 2) return null;
+  const cur = log.at(-1), prev = log.at(-2);
+  if (cur.v === prev.v) return null;
+  return { from: prev, to: cur };
 }
 
 // The attestation layer the engine sees, plus evidence lines that make every
@@ -77,6 +91,13 @@ export function governanceFromAnswers(mode) {
       ];
     } else {
       evidence[checkId] = [`Seeded/unattributed answer ("${a.v ? 'Yes' : 'No'}") — re-save in the Questionnaire to attribute and date it`];
+    }
+    const c = contestedInfo(a);
+    if (c) {
+      evidence[checkId] = [
+        `CONTESTED: changed ${c.from.v ? 'Yes' : 'No'}→${c.to.v ? 'Yes' : 'No'} by ${c.to.by} on ${new Date(c.to.at).toLocaleDateString()} (previously ${c.from.v ? 'Yes' : 'No'} by ${c.from.by}) — bring to the governance forum`,
+        ...(evidence[checkId] ?? []),
+      ];
     }
   }
   return { governance, evidence };

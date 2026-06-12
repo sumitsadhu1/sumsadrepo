@@ -49,15 +49,18 @@ async function refresh() {
   S = await api('/api/state');
   S.audit = S.audit ?? []; S.history = S.history ?? []; // belt-and-braces vs null stores (§10.3)
   $('#mode-select').value = S.settings.mode;
-  $('#tenant-name').textContent = S.assessment
+  const liveChip = S.settings.mode === 'live'
+    ? (S.live?.connected ? ' · ✓ tenant connected' : ' · not connected — sign in under Settings')
+    : '';
+  $('#tenant-name').textContent = (S.assessment
     ? `${S.assessment.tenantName} — scanned ${new Date(S.assessment.at).toLocaleString()}`
-    : 'No assessment yet — pick a tenant and click Run assessment';
+    : 'No assessment yet — pick a tenant and click Run assessment') + liveChip;
   $('#whoami').textContent = S.identity ? `${S.identity.name} · ${S.identity.role}` : '';
   renderAll();
 }
 
 function renderAll() {
-  renderOverview(); renderFindings(); renderPlan(); renderRegister(); renderQuestionnaire(); renderAudit(); renderSettings();
+  renderOverview(); renderFindings(); renderPlan(); renderRegister(); renderQuestionnaire(); renderAudit(); renderSettings(); renderHelp();
 }
 
 /* ---------- Overview ---------- */
@@ -135,18 +138,37 @@ function renderOverview() {
       <svg viewBox="0 0 ${w} ${h}" style="width:100%;max-width:460px">${line('configScore', '#0f6cbd')}${line('attestScore', '#b97e00')}</svg>
       <div class="muted"><span style="color:#0f6cbd">■</span> config &nbsp; <span style="color:#b97e00">■</span> attestation</div></div>`;
   })() : '';
+  // Each control row expands to its constituent checks (§12 UX4): the customer
+  // sees WHICH check makes up the missing % without leaving for Findings.
   const bars = Object.entries(scores.perControl).map(([n, c]) => {
     const xw = S.stages.crosswalk?.[n];
+    const checks = S.assessment.results.filter((r) => r.control === Number(n));
+    const m = checks.filter((r) => ['pass', 'fail'].includes(r.status));
+    const detail = checks.map((r) => `
+      <div style="padding:3px 0 3px 12px">
+        <span class="pill ${r.status}">${r.status}</span>
+        <b class="mono">${r.id}</b> ${esc(r.title)}
+        ${r.evidence?.length ? `<div class="muted xwline" style="padding-left:8px">${esc(r.evidence[0])}</div>` : ''}
+      </div>`).join('');
     return `
-    <div class="bar-row">
-      <div class="bar-label">${n}. ${esc(c.name)}
-        ${xw ? `<div class="muted xwline">${esc(xw.nist)} · ${esc(xw.iso)} · ${esc(xw.eu)}</div>` : ''}</div>
-      <div class="bar config"><i style="width:${c.config ?? 0}%"></i><span>${c.config == null ? 'n/a' : c.config + '%'} measured</span></div>
-      <div class="bar attest"><i style="width:${c.attest ?? 0}%"></i><span>${c.attest == null ? 'n/a' : c.attest + '%'} attested</span></div>
-    </div>`;
+    <details class="ctl-row">
+      <summary>
+        <div class="bar-row">
+          <div class="bar-label">${n}. ${esc(c.name)}
+            <div class="muted xwline">${m.length}/${checks.length} measured, ${m.filter((r) => r.status === 'pass').length} passing${xw ? ` · ${esc(xw.nist)} · ${esc(xw.iso)} · ${esc(xw.eu)}` : ''}</div></div>
+          <div class="bar config"><i style="width:${c.config ?? 0}%"></i><span>${c.config == null ? 'n/a' : c.config + '%'} measured</span></div>
+          <div class="bar attest"><i style="width:${c.attest ?? 0}%"></i><span>${c.attest == null ? 'n/a' : c.attest + '%'} attested</span></div>
+        </div>
+      </summary>
+      ${detail}
+    </details>`;
   }).join('');
+  const deltaLine = S.assessment.delta && S.assessment.delta.summary !== 'no change'
+    ? `<p class="muted mono">Since last run: ${esc(S.assessment.delta.summary)}</p>`
+    : (S.assessment.delta ? '<p class="muted mono">Since last run: no change</p>' : '');
   el.innerHTML = `
     <div class="stageline">${stages}</div>
+    ${deltaLine}
     <div class="cards">
       <div class="card"><h3>Config score <span class="pill mode">measured</span></h3>
         <div class="big mono">${scores.configScore ?? '—'}%</div>
@@ -203,7 +225,7 @@ function renderFindings() {
       <button class="small" onclick="window.open('/api/export/findings.csv')">CSV</button>
       <button class="small" onclick="window.open('/api/export/assessment.json')">JSON</button>
     </div>
-    <table><thead><tr><th>Check</th><th>Finding</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+    <table><thead><tr><th>Check</th><th>Finding</th><th>Status</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="muted">No checks match this filter.</td></tr>'}</tbody></table>`;
   $('#f-text').addEventListener('input', (e) => { findingsFilter.text = e.target.value; renderFindings(); $('#f-text').focus(); $('#f-text').setSelectionRange(99, 99); });
   $('#f-status').addEventListener('change', (e) => { findingsFilter.status = e.target.value; renderFindings(); });
 }
@@ -242,9 +264,9 @@ window.closeModal = () => $('#modal').classList.add('hidden');
 /* ---------- Plan ---------- */
 function renderPlan() {
   const el = $('#tab-plan');
-  const target = S.answers.targetStage || 4;
+  const target = S.answers.targetStage || Math.min((S.assessment?.placement.stage ?? 1) + 1, 4);
   const head = `<div class="cards"><div class="card"><h3>Plan</h3>
-    <p class="muted">Generated from the gap between current state and target stage. Tasks auto-close when a re-scan proves the check passes, and reopen on drift.</p>
+    <p class="muted">Generated from the gap between current state and target stage. Tasks auto-close when a re-scan proves the check passes, and reopen on drift.${S.answers.targetStage ? '' : ' No target set in the Questionnaire — defaulting to the next gate.'}</p>
     <button class="primary" onclick="genPlan()">Generate / regenerate plan (target: Stage ${target})</button></div></div>`;
   if (!S.plan) { el.innerHTML = head + '<p class="muted">No plan yet.</p>'; return; }
   const stageName = (n) => S.stages.stages.find((s) => s.n === n)?.name ?? n;
@@ -371,10 +393,15 @@ function answerStamp(a) {
   }
   const age = Math.floor((Date.now() - Date.parse(a.at)) / 86400000);
   const expired = age > 90;
-  return `<div class="muted mono ${expired ? 'warn' : ''}">
+  // contested: the two most recent logged attestations disagree (§14.2)
+  const log = a.log ?? [];
+  const contested = log.length >= 2 && log.at(-1).v !== log.at(-2).v
+    ? `<div class="warn mono">CONTESTED — changed ${log.at(-2).v ? 'Yes' : 'No'}→${log.at(-1).v ? 'Yes' : 'No'} by ${esc(log.at(-1).by)} (previously ${esc(log.at(-2).by)} on ${new Date(log.at(-2).at).toLocaleDateString()}). Bring to the governance forum.</div>`
+    : '';
+  return `${contested}<div class="muted mono ${expired ? 'warn' : ''}">
     ${expired ? 'EXPIRED — ' : ''}attested by ${esc(a.by ?? 'unknown')} on ${new Date(a.at).toLocaleDateString()}
     ${expired ? `(${age}d ago, limit 90d — re-affirm below)` : `(expires in ${90 - age}d)`}
-    ${a.note ? ` · "${esc(a.note)}"` : ''}</div>`;
+    ${a.note ? ` · "${esc(a.note)}"` : ''}${log.length > 1 ? ` · ${log.length} attestations on record` : ''}</div>`;
 }
 
 function renderQuestionnaire() {
@@ -429,14 +456,15 @@ function renderAudit() {
     <td>${esc(a.approvedBy)}</td><td>${esc(a.environment)}</td></tr>`).join('');
   const hist = [...S.history].reverse().slice(0, 12).map((h) => `
     <tr><td>${new Date(h.at).toLocaleString()}</td><td>${esc(h.mode)}</td><td>Stage ${h.stage}</td>
-    <td>${h.configScore ?? '—'}%</td><td>${h.attestScore ?? '—'}%</td></tr>`).join('');
+    <td>${h.configScore ?? '—'}%</td><td>${h.attestScore ?? '—'}%</td>
+    <td class="muted mono">${esc(h.changed ?? '—')}</td></tr>`).join('');
   el.innerHTML = `
     <h3>Configuration changes (who approved, what changed)</h3>
     <table><thead><tr><th>When</th><th>Check</th><th>Setting</th><th>Before → after</th><th>Approved by</th><th>Env</th></tr></thead>
     <tbody>${rows || '<tr><td colspan="6" class="muted">No changes applied yet.</td></tr>'}</tbody></table>
     <h3 style="margin-top:24px">Assessment history (trajectory)</h3>
-    <table><thead><tr><th>When</th><th>Mode</th><th>Stage</th><th>Config</th><th>Attest</th></tr></thead>
-    <tbody>${hist || '<tr><td colspan="5" class="muted">No runs yet.</td></tr>'}</tbody></table>`;
+    <table><thead><tr><th>When</th><th>Mode</th><th>Stage</th><th>Config</th><th>Attest</th><th>What changed</th></tr></thead>
+    <tbody>${hist || '<tr><td colspan="6" class="muted">No runs yet.</td></tr>'}</tbody></table>`;
 }
 
 /* ---------- Settings ---------- */
@@ -448,10 +476,12 @@ function renderSettings() {
       <div class="card">
         <h3>Workspace</h3>
         ${S.settings.mode === 'live'
-          ? `<p class="muted">Clears this live tenant's plan, history, audit trail, answers, register, and evidence pack. Your sign-in token is kept — collect again to re-scan. Requires a fix-capable role.</p>
-             <button onclick="resetWorkspace()">Clear live workspace</button>`
-          : `<p class="muted">Demo tenants: Contoso (early journey) and Fabrikam (governing agents). Demo fixes persist; reset restores the original fixture and clears this tenant's plan, history, and audit.</p>
-             <button onclick="resetWorkspace()">Reset current demo tenant</button>`}
+          ? `<p class="muted">Clears this live tenant's plan, history, audit trail, answers, register, and evidence pack. Your sign-in token is kept — collect again to re-scan.</p>
+             ${S.perms?.fix
+               ? '<button onclick="resetWorkspace()">Clear live workspace</button>'
+               : '<button disabled title="Requires Global Admin, Security Admin, or AI Governance Lead">Clear live workspace</button>'}`
+          : `<p class="muted">Sample tenants: Contoso (early journey) and Fabrikam (governing agents). Demo fixes persist; reset restores the original fixture and clears this tenant's plan, history, and audit.</p>
+             <button onclick="resetWorkspace()">Reset current sample tenant</button>`}
       </div>
       <div class="card">
         <h3>Live tenant (read-only)</h3>
@@ -467,7 +497,12 @@ function renderSettings() {
         <input id="live-tenant" placeholder="Tenant ID" value="${esc(live.tenantId || '')}" style="width:100%;margin-bottom:6px">
         <input id="live-client" placeholder="App (client) ID" value="${esc(live.clientId || '')}" style="width:100%;margin-bottom:6px">
         <button class="primary" onclick="liveStart()">Sign in with device code</button>
+        ${S.perms?.fix && S.live?.connected ? '<button onclick="disconnectTenant()" title="Forget the encrypted refresh token and collected snapshot">Disconnect tenant</button>' : ''}
         <div id="live-status" class="muted" style="margin-top:8px"></div>
+        <p class="${S.live?.connected ? '' : 'muted'}" style="margin-top:8px">
+          ${S.live?.connected
+            ? `✓ <b>Tenant connected</b> (encrypted token on file)${S.live.scannedAt ? ` — last collected ${esc(new Date(S.live.scannedAt).toLocaleString())}` : ' — not yet collected'}`
+            : 'Not connected — no tenant token on file.'}</p>
       </div>
       <div class="card">
         <h3>Evidence pack</h3>
@@ -476,11 +511,11 @@ function renderSettings() {
         JSON here. Pack values are <b>measured</b> posture with full provenance; packs expire after
         ${S.evidencePack?.maxAgeDays ?? 30} days.</p>
         ${renderPackStatus()}
-        ${S.perms?.fix ? `
+        ${S.perms?.evidence ? `
           <input id="pack-file" type="file" accept=".json,application/json" style="width:100%;margin-bottom:6px">
           <button class="primary" onclick="importPack()">Import evidence pack</button>
           ${S.evidencePack ? '<button onclick="clearPack()">Remove pack</button>' : ''}`
-        : '<p class="warn">Importing measured evidence requires Global Admin, Security Admin, or AI Governance Lead.</p>'}
+        : '<p class="warn">Importing measured evidence requires Global Admin, Security Admin, AI Governance Lead, or Compliance Admin.</p>'}
         <div id="pack-status" class="muted" style="margin-top:8px"></div>
       </div>
     </div>`;
@@ -522,9 +557,33 @@ window.resetWorkspace = async function () {
   await refresh();
 };
 
+// Translate the AADSTS codes a self-service admin is most likely to hit into
+// one-line plain-language hints (§13.2 P2-a); the raw error stays visible too.
+function friendlyAad(msg) {
+  const hints = {
+    AADSTS900023: 'The Tenant ID is not a valid GUID or *.onmicrosoft.com domain — copy it from Entra → Overview.',
+    AADSTS7000218: "Enable 'Allow public client flows' on the app registration (Entra → your app → Authentication).",
+    AADSTS65001: 'Admin consent is missing for the requested scopes — grant it under API permissions.',
+    AADSTS700016: 'The App (client) ID was not found in this tenant — check the ID and the tenant.',
+    AADSTS70019: 'The sign-in code expired — start the device-code sign-in again.',
+  };
+  for (const [code, hint] of Object.entries(hints)) if (msg.includes(code)) return `${hint} (${code})`;
+  return msg;
+}
+
+const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 window.liveStart = async function () {
   const tenantId = $('#live-tenant').value.trim(), clientId = $('#live-client').value.trim();
   if (!tenantId || !clientId) { toast('Tenant ID and client ID required'); return; }
+  if (!GUID_RE.test(tenantId) && !/^[a-z0-9-]+\.onmicrosoft\.com$/i.test(tenantId) && !tenantId.includes('.')) {
+    $('#live-status').textContent = 'The Tenant ID should be a GUID (from Entra → Overview) or a domain like contoso.onmicrosoft.com.';
+    return;
+  }
+  if (!GUID_RE.test(clientId)) {
+    $('#live-status').textContent = 'The App (client) ID should be a GUID — copy it from the app registration overview.';
+    return;
+  }
   await api('/api/settings', { live: { tenantId, clientId } });
   try {
     const r = await api('/api/live/start', { tenantId, clientId });
@@ -540,12 +599,70 @@ window.liveStart = async function () {
           $('#live-status').textContent = 'Live snapshot collected. Run assessment.';
           await refresh();
         }
-      } catch (e) { clearInterval(timer); $('#live-status').textContent = 'Error: ' + e.message; }
+      } catch (e) { clearInterval(timer); $('#live-status').textContent = 'Error: ' + friendlyAad(e.message); }
     }, 5000);
-  } catch (e) { $('#live-status').textContent = 'Error: ' + e.message; }
+  } catch (e) { $('#live-status').textContent = 'Error: ' + friendlyAad(e.message); }
+};
+
+window.disconnectTenant = async function () {
+  if (!confirm('Forget the tenant connection? The encrypted token and the collected snapshot are deleted; you will need to sign in again to re-scan.')) return;
+  try { await api('/api/live/disconnect', {}); toast('Tenant disconnected — token and snapshot forgotten'); } catch (e) { toast(e.message); }
+  await refresh();
 };
 
 window.goTab = (t) => document.querySelector(`[data-tab=${t}]`)?.click();
+
+/* ---------- Help / FAQ (static, self-service) ---------- */
+let helpRendered = false;
+function renderHelp() {
+  if (helpRendered) return;
+  helpRendered = true;
+  const qa = (q, a) => `<details class="qq"><summary class="q" style="cursor:pointer">${q}</summary><div class="muted" style="margin-top:6px">${a}</div></details>`;
+  $('#tab-help').innerHTML = `
+    <div class="note">Quick answers for running this tool self-service against your own tenant. Scope: one customer, one tenant, all data local to this machine (<code>app/data/</code>).</div>
+    <h3>Getting started</h3>
+    ${qa('What does this tool actually do?',
+      'It measures your M365 tenant’s AI/agent governance posture across 41 checks in 9 controls, places you on a 4-stage journey (Get Ready → Adopt &amp; Extend → Govern Agents → Frontier), and generates a remediation plan whose tasks auto-close when a re-scan proves the work was done. Two layers: <b>measured</b> config evidence (Graph + evidence pack) and <b>self-attested</b> governance signals (questionnaire + register).')}
+    ${qa('Why does it say Stage 1 when we’re further along?',
+      'Stages are earned on evidence. A gate only passes when ≥80% of its checks are actually <i>measured</i> and none fail — unmeasured checks block gates rather than being assumed fine. If you’re sure you’re further along, the "To reach Stage N" panel tells you exactly which checks to measure or fix. The tool can understate; it is built never to overstate.')}
+    ${qa('What are the sample tenants for?',
+      'Contoso and Fabrikam are built-in sample datasets for exploring the journey and safely exercising the Configure pipeline. They never touch your tenant, and your tenant’s workspace is fully separate from theirs.')}
+    <h3>Safety &amp; privacy</h3>
+    ${qa('Is it safe to connect my production tenant?',
+      'The connection is read-only by design: every Graph call is a GET, the requested scopes are all *.Read.*, and the Configure pipeline refuses to run in live mode. Your refresh token is stored AES-256-GCM-encrypted on this machine only; access tokens stay in memory; sign-in happens at microsoft.com via device code — this tool never sees your password.')}
+    ${qa('Where does my data go?',
+      'Nowhere. Everything (assessments, plan, register, answers, audit trail) is JSON files under <code>app/data/</code> on this machine. There is no telemetry and no external service.')}
+    ${qa('How do I end my session or disconnect the tenant?',
+      '<b>Sign out</b> (header) ends your app session. <b>Settings → Disconnect tenant</b> deletes the encrypted token and the collected snapshot. <b>Settings → Clear live workspace</b> wipes the live tenant’s plan/history/audit but keeps the token.')}
+    <h3>Connecting your tenant</h3>
+    ${qa('Sign-in fails with AADSTS7000218',
+      'Open your app registration in Entra → <b>Authentication</b> → enable <b>Allow public client flows</b>. This is the most common setup miss.')}
+    ${qa('Sign-in fails with AADSTS65001 / consent errors',
+      'The delegated read-only scopes need admin consent: Entra → your app → API permissions → <b>Grant admin consent</b>. The exact 7 scopes are listed in Settings.')}
+    ${qa('Most checks say "not collected" after a live scan — is that broken?',
+      'No — that’s honesty. Graph only exposes part of the Stage-1/2 surface. Run <code>scripts/collect-evidence.ps1</code> as your SharePoint/Compliance admin and import the pack (Settings) to measure DAG, RCD/RAC, DLP, audit, and retention. Unmeasured checks are listed as gate blockers and as "measure" tasks in the Plan.')}
+    <h3>Reading the results</h3>
+    ${qa('What is "the gap"?',
+      'Config score minus attestation score: how much of your technically-ready posture is NOT yet covered by accountable governance (owners, attestations, decision rights). It’s the number most readiness checklists miss.')}
+    ${qa('Measured vs self-attested — why the two badges?',
+      'Measured = read from your tenant or an imported evidence pack, with evidence lines. Self-attested = asserted by your own people (questionnaire/register), attributed and expiring after 90 days, but not independently verifiable. The report keeps the two separated so nobody mistakes assertion for evidence.')}
+    ${qa('What does CONTESTED mean on a questionnaire answer?',
+      'The two most recent attestations for that control disagree (e.g. Compliance said Yes, an Agent Owner later said No). The latest answer is authoritative for scoring, but the conflict is surfaced — it’s exactly the agenda item your governance forum exists for.')}
+    ${qa('Why are some checks "unlockable (E5)"?',
+      'They depend on optimized-tier licensing (E5/A5). They’re excluded from your score rather than failed — listed so you know what additional governance capability licensing would unlock.')}
+    <h3>Working the plan</h3>
+    ${qa('Why did a plan task close by itself?',
+      'Tasks bind to checks. When a re-scan proves the check passes (or a "measure" task’s check becomes measured), the task auto-closes with an evidence trail — and reopens automatically if the configuration drifts back.')}
+    ${qa('Who can do what? (roles)',
+      'Sign-in role drives permissions, enforced server-side: <b>Global Admin / AI Governance Lead</b> — everything; <b>Security Admin</b> — fix, plan, evidence import (not attest); <b>Compliance Admin</b> — attest, plan, evidence import (not fix); <b>Agent Owner</b> — attest only; <b>Solution Architect</b> — plan only; <b>Operator</b> — read-only. Note this is attribution within your team, not an identity boundary — anyone with the access key picks a role.')}
+    <h3>Troubleshooting</h3>
+    ${qa('I lost the access key',
+      'Stop the server, delete <code>app/data/auth.json</code>, restart — a new key prints once.')}
+    ${qa('The first live scan after a restart failed with "fetch failed"',
+      'A cold-start blip; the token refresh retries automatically now. If it persists, check the machine’s network can reach login.microsoftonline.com and graph.microsoft.com.')}
+    ${qa('Something looks stale or wrong in a tenant’s data',
+      'Settings → reset the current workspace (sample tenants restore their fixture; live keeps your sign-in). Every tenant’s workspace is isolated, so resetting one never touches another.')}`;
+}
 
 /* ---------- wiring ---------- */
 document.querySelectorAll('#tabs button').forEach((b) => b.addEventListener('click', () => {
@@ -567,6 +684,11 @@ $('#mode-select').addEventListener('change', async (e) => {
 });
 
 $('#btn-report').addEventListener('click', () => window.open('/api/report', '_blank'));
+$('#btn-logout').addEventListener('click', async () => {
+  try { await api('/api/logout', {}); } catch {}
+  S = null;
+  showLogin();
+});
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
 $('#btn-assess').addEventListener('click', async () => {

@@ -13,7 +13,7 @@ import {
   getSettings, saveSettings, buildSnapshot, resetWorkspace,
   fixPreview, fixApply, deviceCodeStart, deviceCodePoll, liveCollect,
 } from './src/collectors.js';
-import { ensureAccessKey, verifyKey, createSession, getSession, canDo, permsFor } from './src/auth.js';
+import { ensureAccessKey, verifyKey, createSession, getSession, destroySession, canDo, permsFor } from './src/auth.js';
 import { importPack, clearPack, packSummary } from './src/evidence.js';
 import { renderReport } from './src/report.js';
 
@@ -22,6 +22,24 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const forbid = (msg) => Object.assign(new Error(msg), { status: 403 });
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1'; // localhost-only unless explicitly overridden
+
+// "What changed since the last run" — the progress feedback a customer
+// re-scanning over time actually needs (§12 UX2).
+function assessmentDelta(prev, results) {
+  if (!prev?.results) return null;
+  const before = Object.fromEntries(prev.results.map((r) => [r.id, r.status]));
+  const changes = results
+    .filter((r) => before[r.id] && before[r.id] !== r.status)
+    .map((r) => ({ id: r.id, from: before[r.id], to: r.status }));
+  const measured = (rs) => rs.filter((r) => ['pass', 'fail'].includes(r.status)).length;
+  const measuredDelta = measured(results) - measured(prev.results);
+  const parts = [
+    ...changes.slice(0, 4).map((c) => `${c.id} ${c.from}→${c.to}`),
+    ...(changes.length > 4 ? [`+${changes.length - 4} more`] : []),
+    ...(measuredDelta ? [`${measuredDelta > 0 ? '+' : ''}${measuredDelta} measured`] : []),
+  ];
+  return { changes, measuredDelta, summary: parts.length ? parts.join(', ') : 'no change' };
+}
 
 function runAssessment() {
   const settings = getSettings();
@@ -32,16 +50,18 @@ function runAssessment() {
   const results = evaluate(snapshot);
   const scores = score(results);
   const placement = placeStage(results);
+  const prev = load('last-assessment-' + mode, null);
   const assessment = {
     at: new Date().toISOString(),
     mode,
     tenantName: snapshot.tenantName,
     results, scores, placement,
+    delta: assessmentDelta(prev, results),
   };
   save('last-assessment-' + mode, assessment);
   verifyPlan(mode, results);
   const history = load('history-' + mode, []);
-  history.push({ at: assessment.at, mode, configScore: scores.configScore, attestScore: scores.attestScore, stage: placement.stage });
+  history.push({ at: assessment.at, mode, configScore: scores.configScore, attestScore: scores.attestScore, stage: placement.stage, changed: assessment.delta?.summary ?? 'first run' });
   save('history-' + mode, history);
   return assessment;
 }
@@ -62,6 +82,11 @@ const routes = {
       audit: load('audit-' + mode, []),
       history: load('history-' + mode, []),
       evidencePack: packSummary(mode),
+      live: {
+        connected: !!load('live-token-enc', null),
+        scannedAt: load('live-snapshot', null)?.scannedAt ?? null,
+        tenantName: load('live-snapshot', null)?.tenantName ?? null,
+      },
     };
   },
   'POST /api/settings': (b) => ({ settings: saveSettings({ ...getSettings(), ...b }) }),
@@ -75,7 +100,8 @@ const routes = {
     const mode = getSettings().mode;
     const a = load('last-assessment-' + mode, null);
     if (!a) throw new Error('Run an assessment first');
-    const target = b.targetStage || getAnswers(mode).targetStage || 4;
+    // Default to the NEXT gate, matching the Overview's coaching — not Frontier (§12 UX3).
+    const target = b.targetStage || getAnswers(mode).targetStage || Math.min(a.placement.stage + 1, 4);
     return { plan: generatePlan(mode, a.results, Number(target)) };
   },
   'POST /api/plan/task': (b, who) => {
@@ -126,17 +152,25 @@ const routes = {
     if (!a) throw new Error('Run an assessment first');
     return { __raw: JSON.stringify({ assessment: a, plan: getPlan(mode), register: getRegister(mode) }, null, 2), __type: 'application/json', __name: 'assessment.json' };
   },
-  // Importing a pack injects MEASURED posture, so it carries the same weight as
-  // applying a fix — gate it behind the same permission.
+  // Importing a pack injects MEASURED posture — gated, but the gate includes
+  // Compliance Admin: the role told to collect the evidence can load it (§13.2 P1-b).
   'POST /api/evidence/import': (b, who) => {
-    if (!canDo(who?.role, 'fix')) throw forbid(`Role "${who?.role}" cannot import evidence packs — requires Global Admin, Security Admin, or AI Governance Lead`);
+    if (!canDo(who?.role, 'evidence')) throw forbid(`Role "${who?.role}" cannot import evidence packs — requires Global Admin, Security Admin, AI Governance Lead, or Compliance Admin`);
     const r = importPack(getSettings().mode, b.pack, `${who?.name} (${who?.role})`);
     return { ...r, assessment: runAssessment(), plan: getPlan(getSettings().mode) };
   },
   'POST /api/evidence/clear': (b, who) => {
-    if (!canDo(who?.role, 'fix')) throw forbid(`Role "${who?.role}" cannot remove evidence packs`);
+    if (!canDo(who?.role, 'evidence')) throw forbid(`Role "${who?.role}" cannot remove evidence packs`);
     clearPack(getSettings().mode);
     return { assessment: runAssessment(), plan: getPlan(getSettings().mode) };
+  },
+  // Forget the encrypted refresh token + collected snapshot (the workstation
+  // hygiene counterpart to sign-out).
+  'POST /api/live/disconnect': (_b, who) => {
+    if (!canDo(who?.role, 'fix')) throw forbid(`Role "${who?.role}" cannot disconnect the tenant`);
+    save('live-token-enc', null);
+    save('live-snapshot', null);
+    return { ok: true };
   },
   'POST /api/live/start': async (b) => deviceCodeStart(b.tenantId, b.clientId),
   'POST /api/live/poll': async () => deviceCodePoll(),
@@ -166,6 +200,16 @@ http.createServer(async (req, res) => {
       res.writeHead(401, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: name ? 'Invalid access key' : 'Your name is required — actions are attributed' }));
     }
+    return;
+  }
+
+  if (key === 'POST /api/logout') {
+    destroySession(req.headers.cookie);
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Set-Cookie': 'aga_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0',
+    });
+    res.end('{"ok":true}');
     return;
   }
 

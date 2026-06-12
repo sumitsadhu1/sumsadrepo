@@ -83,3 +83,8 @@ code { background: #f0f2f4; padding: 1px 5px; border-radius: 4px; font-size: 12p
 .filterbar input { flex: 0 1 340px; }
 .xwline { font-size: 10.5px; letter-spacing: .2px; }
 .stage-chip .mono { display: block; margin-top: 4px; font-size: 10.5px; color: var(--muted); }
+details.ctl-row summary { list-style: none; cursor: pointer; }
+details.ctl-row summary::-webkit-details-marker { display: none; }
+details.ctl-row { border-bottom: 1px solid var(--line); padding: 2px 0; }
+details.ctl-row[open] { background: #fafbfc; border-radius: 8px; padding: 4px 6px; }
+details.ctl-row summary:hover .bar-label { color: var(--blue); }

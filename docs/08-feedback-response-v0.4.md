@@ -105,3 +105,24 @@ The tool's scope is a **single customer running it against their own tenant** �
 - **§9.4 concurrent-use caveat (global tenant mode) — by design.** A single customer workspace assumes one operating team on one instance; no per-session tenant switching is needed.
 - **Self-serve onboarding shipped (v0.7.3):** first-run Overview presents the "connect your tenant" path as primary (with the sample tenants as the no-setup alternative); the full Entra one-time setup steps are inline in Settings; the mode selector reads "Your tenant (live, read-only)" first; README opens with a customer quickstart.
 - The reviewer's "best use today: facilitated instrument" caution still applies to *interpretation* — but the §2/§10 honesty fixes (coverage floors, anti-fabrication, provenance) are what make unattended self-serve verdicts safe: the tool can understate, never overstate.
+
+---
+
+# v0.8 — response to §12–§15 (self-service UX batch, persona click-through, two substantive findings)
+
+| Finding | Disposition |
+|---|---|
+| **§14.1 (HIGH)** E5 detection misses `Microsoft_365_E5_(no_Teams)` | **Fixed** — matcher rebuilt against the Microsoft licensing reference (verified this session, not from memory): `ENTERPRISEPREMIUM*`, `SPE_E5*`, `MICROSOFT_365_E5*` (covers `(no_Teams)` + `_EEA_` variants), `OFFICE_365_E5*`, `*BUNDLE_E5` (w/o-Teams bundle family), `M365EDU_A5*` — and deliberately **not** the E5 Security/Compliance add-ons (`IDENTITY_THREAT_PROTECTION_FOR_EMS_E5` asserted false in the regression test). 8-case regression pins it. |
+| **§14.2 (MED)** conflicting attestations silently overwritten | **Fixed** — both attestation surfaces keep an append-only log (last 20). Questionnaire: latest is authoritative, but when the two most recent entries disagree the check carries a **CONTESTED** evidence line ("changed Yes→No by X, previously Yes by Y — bring to the governance forum") and the UI badges it. Register: re-attestations append to `attestLog`. |
+| §13.2 P1-a sign-out | **Fixed** — header Sign out (server session destroyed, cookie expired) + Settings **Disconnect tenant** (forgets encrypted token + snapshot, fix-gated). |
+| §13.2 P1-b evidence-role seam | **Fixed** — new `evidence` permission includes **Compliance Admin** (collector guidance and import right now name the same roles); does not leak the fix right. |
+| §13.2 P2-a raw AADSTS errors | **Fixed** — client-side GUID/domain validation before calling Microsoft + plain-language hints for AADSTS900023 / 7000218 / 65001 / 700016 / 70019 (code kept visible). |
+| §13.2 P2-b inconsistent denial affordances | **Fixed** — "Clear live workspace" now disabled-with-tooltip (pattern (a)); no enabled-then-403 controls remain. |
+| §13.2 P3-a empty filter | **Fixed** — explicit "No checks match this filter" row. |
+| §12 UX1 connection feedback | **Fixed** — persistent "✓ tenant connected / not connected" in the live header line + Settings status (token on file, last collected). |
+| §12 UX2 what-changed between runs | **Fixed** — every assessment computes a delta vs the previous run (status changes + measured count); shown on the Overview ("Since last run: …") and as a "What changed" column in the trajectory table. |
+| §12 UX3 plan target defaulted to Frontier | **Fixed** — defaults to the **next gate** (`stage+1`), matching the Overview's coaching; UI says so when no target is set. |
+| §12 UX4 per-control opacity | **Fixed** — each control row expands in place to its constituent checks ("X/Y measured, Z passing" + status pill + first evidence line per check). |
+| §12 UX5 in-app help | **Fixed** — new **Help** tab: ~18 Q&As grounded in actual behavior (getting started, safety/privacy, connecting incl. AADSTS7000218/65001, reading results incl. CONTESTED and unlockable, plan mechanics, role matrix, troubleshooting). Reviewer's `faq-preview.html` wasn't in the repo, so the content was written fresh against verified behavior. |
+
+Tests **37/37** (E5 SKU regression ×8 cases, contested-attestation log, evidence permission). Live-verified: Compliance Admin pack import 200 (was 403), Operator import/disconnect 403, plan default target 2 on a Stage-1 tenant, logout → 401, `Microsoft_365_E5_(no_Teams)` → `e5: true`.

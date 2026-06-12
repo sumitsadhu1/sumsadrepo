@@ -64,5 +64,5 @@ test('RBAC: roles gate fix and attest actions (FEEDBACK §3.3)', () => {
   assert.ok(!canDo('Solution Architect', 'fix'));
   assert.ok(canDo('Agent Owner', 'attest'));
   assert.ok(!canDo('Security Admin', 'attest'));
-  assert.deepEqual(permsFor('Operator'), { fix: false, attest: false, plan: false });
+  assert.deepEqual(permsFor('Operator'), { fix: false, attest: false, plan: false, evidence: false });
 });

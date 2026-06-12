@@ -17,6 +17,7 @@
   </div>
   <div class="header-actions">
     <span id="whoami" class="muted"></span>
+    <button id="btn-logout" class="small" title="End your session (the access key is required to sign back in)">Sign out</button>
     <button id="btn-report" class="small" title="Open the executive report (print → PDF)">Export report</button>
     <select id="mode-select" title="Tenant mode">
       <option value="live">Your tenant (live, read-only)</option>
@@ -35,6 +36,7 @@
   <button data-tab="questionnaire">Questionnaire</button>
   <button data-tab="audit">Audit</button>
   <button data-tab="settings">Settings</button>
+  <button data-tab="help">Help</button>
 </nav>
 
 <main>
@@ -45,6 +47,7 @@
   <section id="tab-questionnaire" class="tab"></section>
   <section id="tab-audit" class="tab"></section>
   <section id="tab-settings" class="tab"></section>
+  <section id="tab-help" class="tab"></section>
 </main>
 
 <div id="modal" class="hidden"><div id="modal-card"></div></div>

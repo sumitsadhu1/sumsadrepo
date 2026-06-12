@@ -51,6 +51,20 @@ test('applications transform: orphans and long-lived secrets flagged with eviden
   assert.ok(out.evidence['AGA-503'][0].includes('Eternal App'));
 });
 
+test('FEEDBACK §14.1: E5 suite detection covers unbundled/EEA variants, excludes add-ons', () => {
+  const e5 = (parts) => transformSkus(parts.map((p) => ({ skuPartNumber: p }))).licenses.e5;
+  // Verified against the Microsoft licensing reference (product names & service plan IDs):
+  assert.equal(e5(['Microsoft_365_E5_(no_Teams)']), true, 'the post-2024 unbundled SKU IS E5');
+  assert.equal(e5(['Microsoft_365_E5_EEA_(no_Teams)_without_Audio_Conferencing']), true);
+  assert.equal(e5(['SPE_E5_NOPSTNCONF']), true);
+  assert.equal(e5(['Office_365_w/o_Teams_Bundle_E5']), true);
+  assert.equal(e5(['ENTERPRISEPREMIUM_NOPSTNCONF']), true);
+  assert.equal(e5(['M365EDU_A5_FACULTY']), true);
+  // E5 Security add-on alone is NOT the optimized suite — must not unlock O-tier checks:
+  assert.equal(e5(['IDENTITY_THREAT_PROTECTION_FOR_EMS_E5']), false);
+  assert.equal(e5(['SPE_E3', 'FLOW_FREE']), false);
+});
+
 test('sku transform: copilot seats summed, tiers detected', () => {
   const out = transformSkus([
     { skuPartNumber: 'Microsoft_365_Copilot', prepaidUnits: { enabled: 100 }, consumedUnits: 80 },

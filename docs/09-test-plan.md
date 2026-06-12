@@ -1,6 +1,6 @@
 # Agent Governance Assessment — Comprehensive Test Plan
 
-**App version:** 0.7.2 · **Branch:** `claude/determined-allen-52zkct`
+**App version:** 0.8.0 · **Branch:** `claude/determined-allen-52zkct` *(§17 covers the v0.8 additions; the §2 matrix reflects v0.8 permissions)*
 **Audience:** developer/QA executing manual UI tests + API checks; automated suite included.
 **Conventions:** every case has an ID, steps, and an **Expected** outcome. `[UI]` = browser, `[API]` = curl/REST, `[AUTO]` = covered by `npm test` (verify it still passes, don't re-test by hand). Traceability column maps to FEEDBACK.md sections.
 
@@ -42,7 +42,7 @@ Run the **matrix** below per role: attempt each action via UI (control should be
 | Attest agent (`/api/register/attest`) | ✅ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ |
 | Change governance answer (`/api/answers` with an `attests` question) | ✅ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ |
 | Plan task update (`/api/plan/task`) | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
-| Import/clear evidence pack | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Import/clear evidence pack | ✅ | ✅ | ✅ | ✅ (v0.8) | ❌ | ❌ | ❌ |
 | Remove register entry | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Clear **live** workspace | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Read state / findings / report / exports | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -226,3 +226,22 @@ Run each as a continuous session; they exercise the integration seams the unit c
 
 - Copilot Chat vs licensed M365 Copilot modelling; Entra Agent ID / Agent 365 wiring; branded PDF/PPT export; "audit instrument" visual restyle; full ARIA/responsive pass. All tracked in `docs/08-feedback-response-v0.4.md` dispositions.
 - **Out of scope by product decision (do not test for):** multi-customer portfolio views and per-session tenant switching — the tool is single-customer, one instance per engagement.
+
+---
+
+## 17. v0.8 additions (E5 SKU, attestation log, self-service ergonomics)
+
+| ID | Case | Steps | Expected | Trace |
+|---|---|---|---|---|
+| TC-17.1 | E5 unbundled SKU | Live tenant with `Microsoft_365_E5_(no_Teams)` (or fixture) → assess | `tenant.licenses.e5 = true`; AGA-302/405/406/904 are scored, **not** "unlockable"; E5 Security add-on alone must NOT count `[AUTO ×8]` | §14.1 |
+| TC-17.2 | Contested attestation | Role A answers a governance question Yes (note), role B changes it to No → assess | Latest (No) scores; the check's evidence leads with `CONTESTED: changed Yes→No by …(previously …)`; questionnaire shows the CONTESTED banner + "2 attestations on record" `[AUTO]` | §14.2 |
+| TC-17.3 | Sign out | Header → Sign out → any action | Session destroyed server-side (API → 401), cookie expired, login overlay shown | §13.2 P1-a |
+| TC-17.4 | Disconnect tenant | Settings (fix-capable, connected) → Disconnect → confirm | `live-token-enc` + snapshot deleted; status shows "Not connected"; re-scan requires fresh device-code | §13.2 P1-a |
+| TC-17.5 | Compliance imports pack | As Compliance Admin import a valid pack | **200**, re-assess runs; as Agent Owner/Operator → 403; Compliance still cannot fix (perm must not leak) `[AUTO]` | §13.2 P1-b |
+| TC-17.6 | GUID validation + AADSTS hints | Enter `not-a-guid` tenant ID; then a valid GUID with public-client flows disabled | Local friendly message without calling Microsoft; AADSTS7000218 surfaced with the "enable Allow public client flows" hint (code still visible) | §13.2 P2-a |
+| TC-17.7 | Denial affordance consistency | Walk every mutating control as Operator | Only two patterns exist: disabled-with-tooltip or hidden-with-reason; **no** enabled control that 403s on click | §13.2 P2-b, §15.1 |
+| TC-17.8 | Run-over-run delta | Assess, change something (fix/attest), assess again | Overview shows "Since last run: AGA-xxx fail→pass …"; trajectory table has a What-changed column; identical runs read "no change" | §12 UX2 |
+| TC-17.9 | Plan default target | Fresh tenant, no targetStage answered → Generate plan | Target = current stage + 1 (not 4); banner notes the default | §12 UX3 |
+| TC-17.10 | Expandable controls | Overview → click a control row | Expands in place: "X/Y measured, Z passing" + each check with pill + first evidence line; collapse works; no layout break | §12 UX4 |
+| TC-17.11 | Connection status | Live mode, connected vs disconnected | Header shows "✓ tenant connected" / "not connected — sign in under Settings"; Settings shows token-on-file + last-collected time | §12 UX1 |
+| TC-17.12 | Help tab | Open Help as every role | Renders all sections; answers match actual behavior (spot-check the AADSTS7000218 and CONTESTED entries) | §12 UX5 |

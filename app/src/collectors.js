@@ -264,6 +264,21 @@ export function transformApplications(apps) {
   };
 }
 
+// E5/A5-suite detection, validated against the Microsoft "Product names and
+// service plan identifiers for licensing" reference (§14.1). Matches full
+// suites only — incl. the post-2024 unbundled "Microsoft 365 E5 (no Teams)"
+// and EEA variants — and deliberately NOT the E5 Security/Compliance add-ons
+// (e.g. IDENTITY_THREAT_PROTECTION_FOR_EMS_E5), which don't carry the full
+// optimized-tier capabilities the O-tier checks assume.
+function isOptimizedSuite(up) {
+  return up.includes('ENTERPRISEPREMIUM')      // Office 365 E5 (+_NOPSTNCONF/_FACULTY/gov)
+    || up.startsWith('SPE_E5')                 // Microsoft 365 E5 (+_NOPSTNCONF)
+    || up.startsWith('MICROSOFT_365_E5')       // Microsoft_365_E5_(NO_TEAMS), _EEA_… variants
+    || up.startsWith('OFFICE_365_E5')          // Office_365_E5_EEA_(NO_TEAMS)… variants
+    || up.includes('BUNDLE_E5')                // Office_365_W/O_TEAMS_BUNDLE_E5 family
+    || up.startsWith('M365EDU_A5');            // education A5
+}
+
 export function transformSkus(skuList) {
   if (!skuList) return null;
   const skus = skuList;
@@ -274,7 +289,7 @@ export function transformSkus(skuList) {
     licenses: {
       copilotSeats,
       e3: has('ENTERPRISEPACK') || has('SPE_E3') || has('M365_E3'),
-      e5: has('ENTERPRISEPREMIUM') || has('SPE_E5') || has('M365_E5'),
+      e5: skus.some((s) => isOptimizedSuite((s.skuPartNumber || '').toUpperCase())),
       sam: has('SHAREPOINTADVANCED'),
     },
     evidence: {

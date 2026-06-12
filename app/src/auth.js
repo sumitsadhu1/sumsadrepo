@@ -46,11 +46,13 @@ export function checkSession(cookieHeader) {
 // The governance tool governs itself: actions are permissioned by role,
 // not just attributed. Approving a change and attesting governance are
 // decision-rights, so they are restricted; read/analyse is open to all roles.
+// 'evidence' (import/clear evidence packs) includes Compliance Admin — the role
+// the collector guidance tells to gather the evidence must be able to load it (§13.2 P1-b).
 const ROLE_PERMS = {
-  'Global Admin': ['fix', 'attest', 'plan'],
-  'Security Admin': ['fix', 'plan'],
-  'AI Governance Lead': ['fix', 'attest', 'plan'],
-  'Compliance Admin': ['attest', 'plan'],
+  'Global Admin': ['fix', 'attest', 'plan', 'evidence'],
+  'Security Admin': ['fix', 'plan', 'evidence'],
+  'AI Governance Lead': ['fix', 'attest', 'plan', 'evidence'],
+  'Compliance Admin': ['attest', 'plan', 'evidence'],
   'Agent Owner': ['attest'],
   'Solution Architect': ['plan'],
   'Operator': [],
@@ -61,5 +63,10 @@ export function canDo(role, action) {
 }
 
 export function permsFor(role) {
-  return { fix: canDo(role, 'fix'), attest: canDo(role, 'attest'), plan: canDo(role, 'plan') };
+  return { fix: canDo(role, 'fix'), attest: canDo(role, 'attest'), plan: canDo(role, 'plan'), evidence: canDo(role, 'evidence') };
+}
+
+export function destroySession(cookieHeader) {
+  const m = /aga_session=([a-f0-9]{48})/.exec(cookieHeader || '');
+  if (m) sessions.delete(m[1]);
 }
